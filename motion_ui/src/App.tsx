@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Fragment  } from "react";
 import type { MouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./App.css";
 import Login from "./Login";
-import type { AuthUser, Conversation, Message } from "./api";
+import { generateTitle, regenerateReply, type AuthUser, type Conversation, type Message } from "./api";
 import {
   listConversations,
   createConversation,
@@ -18,6 +18,27 @@ import {
   register,
   setUnauthorizedHandler,
 } from "./api";
+
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard access was blocked */
+    }
+  }
+
+  return (
+    <button className="action-btn" onClick={copy}>
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Chat screen (only shown when logged in)                             */
@@ -103,6 +124,41 @@ function Chat({ email, onLogout }: { email: string; onLogout: () => void }) {
       alert((err as Error).message);
     }
   }
+  function appendToken(token: string) {
+    setMessages((prev) => {
+      const copy = [...prev];
+      const last = copy[copy.length - 1];
+      copy[copy.length - 1] = { ...last, content: last.content + token };
+      return copy;
+    });
+  }
+
+  async function regenerate() {
+    if (loading || activeId === null) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+
+    setLoading(true);
+    // Replace the old reply with an empty bubble that fills as tokens arrive
+    setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content: "" }]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      await regenerateReply(activeId, appendToken, controller.signal);
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setMessages((prev) => [
+          ...prev.slice(0, -1),
+          { role: "assistant", content: `Something went wrong: ${(err as Error).message}` },
+        ]);
+      }
+    } finally {
+      setLoading(false);
+      refreshList();
+    }
+  }
 
   async function sendMessage() {
     const text = input.trim();
@@ -118,25 +174,27 @@ function Chat({ email, onLogout }: { email: string; onLogout: () => void }) {
 
     const controller = new AbortController();
     abortRef.current = controller;
-
+    let titleForId: number | null = null; // set only when this message creates a new chat
     try {
       let id = activeId;
       if (id === null) {
         const created = await createConversation();
         id = created.id;
+        titleForId = id;
         setActiveId(id);
       }
 
       await streamChat(
         id,
         text,
-        (token) =>
-          setMessages((prev) => {
-            const copy = [...prev];
-            const last = copy[copy.length - 1];
-            copy[copy.length - 1] = { ...last, content: last.content + token };
-            return copy;
-          }),
+        // (token) =>
+        //   setMessages((prev) => {
+        //     const copy = [...prev];
+        //     const last = copy[copy.length - 1];
+        //     copy[copy.length - 1] = { ...last, content: last.content + token };
+        //     return copy;
+        //   }),
+        appendToken,
         controller.signal
       );
     } catch (err) {
@@ -153,6 +211,10 @@ function Chat({ email, onLogout }: { email: string; onLogout: () => void }) {
     } finally {
       setLoading(false);
       refreshList(); // picks up the auto-generated title
+      if (titleForId !== null) {
+        // Runs in the background; the sidebar updates when the title is ready
+        generateTitle(titleForId).then(refreshList).catch(() => {});
+      }
     }
   }
 
@@ -214,7 +276,7 @@ function Chat({ email, onLogout }: { email: string; onLogout: () => void }) {
 
         <div className="chat">
           {messages.length === 0 && <div className="welcome">How can I help you today?</div>}
-          {messages.map((m, i) => (
+          {/* {messages.map((m, i) => (
             <div key={i} className={`msg ${m.role}`}>
               {m.role === "assistant" ? (
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -224,7 +286,36 @@ function Chat({ email, onLogout }: { email: string; onLogout: () => void }) {
                 m.content
               )}
             </div>
-          ))}
+          ))} */}
+          {messages.map((m, i) => {
+            const isLast = i === messages.length - 1;
+            const streaming = loading && isLast && m.role === "assistant";
+
+            return (
+              <Fragment key={i}>
+                <div className={`msg ${m.role}`}>
+                  {m.role === "assistant" ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {m.content || (loading ? "Thinking..." : "")}
+                    </ReactMarkdown>
+                  ) : (
+                    m.content
+                  )}
+                </div>
+
+                {m.role === "assistant" && m.content && !streaming && (
+                  <div className="msg-actions">
+                    <CopyButton text={m.content} />
+                    {isLast && (
+                      <button className="action-btn" onClick={regenerate}>
+                        Regenerate
+                      </button>
+                    )}
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
           <div ref={bottomRef} />
         </div>
 

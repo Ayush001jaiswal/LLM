@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 const secret = process.env.JWT_SECRET;
 if (!secret) throw new Error("JWT_SECRET is not set in .env");
 const JWT_SECRET: string = secret;
+export const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 10);
 
 export function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);

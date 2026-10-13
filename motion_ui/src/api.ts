@@ -116,6 +116,39 @@ export async function deleteConversation(id: number): Promise<void> {
   await ensureOk(res);
 }
 
+// export async function streamChat(
+//   id: number,
+//   content: string,
+//   onToken: (text: string) => void,
+//   signal: AbortSignal
+// ): Promise<void> {
+//   const res = await fetch(`${API}/conversations/${id}/chat`, {
+//     method: "POST",
+//     headers: authHeaders({ "Content-Type": "application/json" }),
+//     body: JSON.stringify({ content }),
+//     signal,
+//   });
+//   await ensureOk(res);
+
+//   const reader = res.body!.getReader();
+//   const decoder = new TextDecoder();
+//   while (true) {
+//     const { done, value } = await reader.read();
+//     if (done) break;
+//     onToken(decoder.decode(value, { stream: true }));
+//   }
+// }
+
+async function readStream(res: Response, onToken: (text: string) => void): Promise<void> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    onToken(decoder.decode(value, { stream: true }));
+  }
+}
+
 export async function streamChat(
   id: number,
   content: string,
@@ -129,12 +162,36 @@ export async function streamChat(
     signal,
   });
   await ensureOk(res);
+  await readStream(res, onToken);
+}
 
-  const reader = res.body!.getReader();
-  const decoder = new TextDecoder();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    onToken(decoder.decode(value, { stream: true }));
-  }
+export async function regenerateReply(
+  id: number,
+  onToken: (text: string) => void,
+  signal: AbortSignal
+): Promise<void> {
+  const res = await fetch(`${API}/conversations/${id}/regenerate`, {
+    method: "POST",
+    headers: authHeaders(),
+    signal,
+  });
+  await ensureOk(res);
+  await readStream(res, onToken);
+}
+
+export interface Conversation {
+  id: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function generateTitle(id: number): Promise<string> {
+  const res = await fetch(`${API}/conversations/${id}/title`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  await ensureOk(res);
+  const data = await res.json();
+  return data.title as string;
 }

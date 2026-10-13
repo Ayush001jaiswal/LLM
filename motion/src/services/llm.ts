@@ -58,3 +58,43 @@ export async function* streamChat(
     }
   }
 }
+
+// Asks the model for a short chat title. Returns null if anything goes wrong.
+export async function generateTitle(
+  userText: string,
+  assistantText: string
+): Promise<string | null> {
+  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(60_000),
+    body: JSON.stringify({
+      model: MODEL,
+      stream: false,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You write short chat titles. Reply with ONLY a title of 3 to 6 words. No quotes, no ending punctuation.",
+        },
+        {
+          role: "user",
+          content: `User: ${userText.slice(0, 500)}\n\nAssistant: ${assistantText.slice(0, 500)}\n\nTitle:`,
+        },
+      ],
+      options: { num_ctx: 2048, num_predict: 20, temperature: 0.3 },
+    }),
+  });
+
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as { message?: { content?: string } };
+  const title = (data.message?.content ?? "")
+    .replace(/["\n\r]/g, " ")
+    .trim()
+    .replace(/^title:\s*/i, "")
+    .replace(/[.!?]+$/, "")
+    .trim();
+
+  return title ? title.slice(0, 60) : null;
+}
