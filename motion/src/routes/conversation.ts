@@ -442,27 +442,12 @@ router.post("/:id/messages/:messageId/edit", modelLimiter, async (req, res) => {
   });
   if (!message) return res.status(404).json({ error: "Message not found" });
 
-  const next = await prisma.message.findFirst({
-    where: { conversationId: id, id: { gt: messageId } },
-    orderBy: { id: "asc" },
-  });
+  await prisma.$transaction([
+    prisma.message.deleteMany({ where: { conversationId: id, id: { gt: messageId } } }),
+    prisma.message.update({ where: { id: messageId }, data: { content: data.content } }),
+  ]);
 
-  // Messages are ordered by id, so a new reply can't be inserted into the middle.
-  // This only happens if an earlier reply failed and the user kept chatting.
-  if (next && next.role !== "assistant") {
-    return res
-      .status(409)
-      .json({ error: "This prompt has no reply to replace. Send a new message instead." });
-  }
-
-  // await prisma.$transaction([
-  //   prisma.message.deleteMany({ where: { conversationId: id, id: { gt: messageId } } }),
-  //   prisma.message.update({ where: { id: messageId }, data: { content: data.content } }),
-  // ]);
-  await prisma.message.update({ where: { id: messageId }, data: { content: data.content } });
-
-  await streamReply(id, res, { upToMessageId: messageId, replaceMessageId: next?.id });
-  //await streamReply(id, res);
+  await streamReply(id, res, { upToMessageId: messageId });
 });
 
 export default router;

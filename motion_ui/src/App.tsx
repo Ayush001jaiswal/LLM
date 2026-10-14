@@ -581,14 +581,11 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
     setLoading(true);
     setStreamIndex(replyIndex);
 
-    // Show the new prompt text and an empty reply bubble. Messages after it stay as they are.
+    // Editing branches the chat here, so later prompts and replies are removed.
     setMessages((prev) => {
-      const copy = [...prev];
+      const copy = prev.slice(0, index + 1);
       copy[index] = { ...copy[index], content: text };
-      const emptyReply: Message = { id: copy[replyIndex]?.id, role: "assistant", content: "", sources: null };
-      if (copy[replyIndex]?.role === "assistant") copy[replyIndex] = emptyReply;
-      else copy.splice(replyIndex, 0, emptyReply);
-      return copy;
+      return [...copy, { role: "assistant", content: "", sources: null }];
     });
 
     const controller = new AbortController();
@@ -874,7 +871,7 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
                       }}
                     />
                     <p className="edit-hint">
-                      Later messages are kept. Only the reply right after this prompt is replaced.
+                      Later messages will be removed when you save and resend this prompt.
                     </p>
                     <div className="edit-actions">
                       <button className="action-btn" onClick={cancelEdit}>
