@@ -27,12 +27,19 @@ import authRouter from "./routes/auth.js";
 import conversationsRouter from "./routes/conversation.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { apiLimiter } from "./middleware/rateLimits.js";
+import multer from "multer";
+import documentsRouter from "./routes/documents.js";
 
 const app = express();
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "http://localhost:5173";
 
 app.use(helmet());
-app.use(cors({ origin: FRONTEND_ORIGIN }));
+app.use(cors(
+  { 
+    origin: FRONTEND_ORIGIN,
+    exposedHeaders: ["X-Sources", "X-User-Message-Id"], 
+  }
+));
 app.use(express.json({ limit: "100kb" })); // rejects huge bodies
 app.use("/api", apiLimiter);
 
@@ -41,6 +48,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/conversations/:id/documents", requireAuth, documentsRouter);
 app.use("/api/conversations", requireAuth, conversationsRouter);
 
 // Unknown routes
@@ -58,7 +66,12 @@ app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (type === "entity.too.large") {
     return res.status(413).json({ error: "Request body too large" });
   }
-
+  if (err instanceof multer.MulterError) {
+    return res
+      .status(err.code === "LIMIT_FILE_SIZE" ? 413 : 400)
+      .json({ error: err.code === "LIMIT_FILE_SIZE" ? "File too large (max 5 MB)" : "Upload failed" });
+  }
+  
   console.error(err);
   if (res.headersSent) return next(err); // mid-stream failure: let Express close the connection
   res.status(500).json({ error: "Something went wrong. Please try again." });

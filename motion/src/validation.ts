@@ -46,3 +46,11 @@ export function parseBody<S extends z.ZodType>(
   }
   return result.data;
 }
+
+export const renameSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, "Title cannot be empty")
+    .max(100, "Title too long (max 100 characters)"),
+});

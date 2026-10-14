@@ -28,6 +28,7 @@ model Conversation {
   userId    Int
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  Message[]
+  documents Document[]
 
   @@index([userId])
 }
@@ -36,9 +37,33 @@ model Message {
   id             Int          @id @default(autoincrement())
   role           String       // "user" or "assistant"
   content        String
+  sources        Json?
   createdAt      DateTime     @default(now())
   conversationId Int
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+model Document {
+  id             Int             @id @default(autoincrement())
+  filename       String
+  createdAt      DateTime        @default(now())
+  conversationId Int
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  chunks         DocumentChunk[]
+
+  @@index([conversationId])
+}
+
+model DocumentChunk {
+  id             Int      @id @default(autoincrement())
+  position       Int
+  content        String
+  embedding      Float[]
+  documentId     Int
+  conversationId Int
+  document       Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
 }

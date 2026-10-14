@@ -38,3 +38,12 @@ export const modelLimiter = rateLimit({
   keyGenerator: (_req, res) => `user-${res.locals.userId}`,
   message: { error: "You're sending messages too fast. Wait a moment." },
 });
+
+// File uploads trigger CPU-heavy embedding work (per user)
+export const uploadLimiter = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 20,
+  keyGenerator: (_req, res) => `user-${res.locals.userId}`,
+  message: { error: "Too many uploads. Try again later." },
+});

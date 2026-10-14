@@ -3,7 +3,9 @@ import { prisma } from "../db/prisma.js";
 import { streamChat, generateTitle, Role } from "../services/llm.js";
 import type { Response } from "express";
 import { modelLimiter } from "../middleware/rateLimits.js";
-import { parseBody, chatSchema, createConversationSchema } from "../validation.js";
+import { parseBody, chatSchema, createConversationSchema, renameSchema  } from "../validation.js";
+import { retrieveContext } from "../services/rag.js";
+import type { Source } from "../services/rag.js";
 
 const router = Router();
 
@@ -13,9 +15,83 @@ function parseId(value: string): number | null {
 }
 
 // Loads recent history, streams the model's reply to the client, then saves it
-async function streamReply(conversationId: number, res: Response): Promise<void> {
+
+// async function streamReply(conversationId: number, res: Response): Promise<void> {
+//   const recent = await prisma.message.findMany({
+//     where: { conversationId },
+//     orderBy: { id: "desc" },
+//     take: 8,
+//   });
+//   const history = recent.reverse().map((m) => ({
+//     role: m.role as Role,
+//     content: m.content,
+//   }));
+
+//   const controller = new AbortController();
+//   res.on("close", () => controller.abort());
+
+//   let context: string | undefined;
+//   let sources: Source[] | undefined;
+//   const lastUser = [...history].reverse().find((m) => m.role === "user");
+//   if (lastUser) {
+//     try {
+//       const found = await retrieveContext(conversationId, lastUser.content, controller.signal);
+//       if (found) {
+//         context = found.context;
+//         sources = found.sources;
+//       }
+//     } catch (err) {
+//       if ((err as Error).name !== "AbortError") console.error("Retrieval failed", err);
+//     }
+//   }
+
+//   let reply = "";
+//   let failure: Error | null = null;
+
+//   try {
+//     res.setHeader("Content-Type", "text/plain; charset=utf-8");
+//     if (sources?.length) {
+//       // Base64 keeps non-English text safe inside an HTTP header
+//       res.setHeader("X-Sources", Buffer.from(JSON.stringify(sources)).toString("base64"));
+//     }
+//     for await (const text of streamChat(history, controller.signal, context)) {
+//       reply += text;
+//       res.write(text);
+//     }
+//   } catch (err) {
+//     if ((err as Error).name !== "AbortError") failure = err as Error;
+//   }
+
+//   if (reply.trim()) {
+//     await prisma.message.create({
+//       data: { conversationId, role: "assistant", content: reply, sources },
+//     });
+//     await prisma.conversation.update({
+//       where: { id: conversationId },
+//       data: { updatedAt: new Date() },
+//     });
+//   }
+
+//   if (failure) {
+//     console.error(failure);
+//     if (!res.headersSent) res.status(500).json({ error: failure.message });
+//     else res.end();
+//     return;
+//   }
+//   res.end();
+// }
+
+async function streamReply(
+  conversationId: number,
+  res: Response,
+  opts: { upToMessageId?: number; replaceMessageId?: number } = {}
+): Promise<void> {
+  // History: the last 8 messages, but only up to the edited prompt when editing
   const recent = await prisma.message.findMany({
-    where: { conversationId },
+    where: {
+      conversationId,
+      ...(opts.upToMessageId ? { id: { lte: opts.upToMessageId } } : {}),
+    },
     orderBy: { id: "desc" },
     take: 8,
   });
@@ -24,16 +100,33 @@ async function streamReply(conversationId: number, res: Response): Promise<void>
     content: m.content,
   }));
 
-  // Stop generating if the user clicks Stop or closes the tab
   const controller = new AbortController();
   res.on("close", () => controller.abort());
+
+  let context: string | undefined;
+  let sources: Source[] | undefined;
+  const lastUser = [...history].reverse().find((m) => m.role === "user");
+  if (lastUser) {
+    try {
+      const found = await retrieveContext(conversationId, lastUser.content, controller.signal);
+      if (found) {
+        context = found.context;
+        sources = found.sources;
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") console.error("Retrieval failed", err);
+    }
+  }
 
   let reply = "";
   let failure: Error | null = null;
 
   try {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    for await (const text of streamChat(history, controller.signal)) {
+    if (sources?.length) {
+      res.setHeader("X-Sources", Buffer.from(JSON.stringify(sources)).toString("base64"));
+    }
+    for await (const text of streamChat(history, controller.signal, context)) {
       reply += text;
       res.write(text);
     }
@@ -41,11 +134,21 @@ async function streamReply(conversationId: number, res: Response): Promise<void>
     if ((err as Error).name !== "AbortError") failure = err as Error;
   }
 
-  // Save the reply (also saves partial text if the user hit Stop)
   if (reply.trim()) {
-    await prisma.message.create({
-      data: { conversationId, role: "assistant", content: reply },
-    });
+    // An empty list clears old sources when a reply is overwritten
+    const sourcesValue = JSON.parse(JSON.stringify(sources ?? []));
+
+    if (opts.replaceMessageId) {
+      // Overwrite the existing reply so it keeps its position in the chat
+      await prisma.message.update({
+        where: { id: opts.replaceMessageId },
+        data: { content: reply, sources: sourcesValue },
+      });
+    } else {
+      await prisma.message.create({
+        data: { conversationId, role: "assistant", content: reply, sources: sourcesValue },
+      });
+    }
     await prisma.conversation.update({
       where: { id: conversationId },
       data: { updatedAt: new Date() },
@@ -112,7 +215,7 @@ router.get("/:id/messages", async (req, res) => {
   const messages = await prisma.message.findMany({
     where: { conversationId: id },
     orderBy: { id: "asc" },
-    select: { id: true, role: true, content: true, createdAt: true },
+    select: { id: true, role: true, content: true, sources: true, createdAt: true },
   });
   res.json({ conversation, messages });
 });
@@ -211,18 +314,22 @@ router.post("/:id/chat", modelLimiter, async (req, res) => {
   const data = parseBody(chatSchema, req.body, res);
   if (!data) return;
 
-  //const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
   const content = data.content;
-//   if (!content) return res.status(400).json({ error: "content is required" });
-//   if (content.length > 4000) return res.status(400).json({ error: "Message too long" });
 
   const userId = res.locals.userId as number;
   const conversation = await prisma.conversation.findFirst({ where: { id, userId } });
   if (!conversation) return res.status(404).json({ error: "Conversation not found" });
 
-  await prisma.message.create({
+  // await prisma.message.create({
+  //   data: { conversationId: id, role: "user", content },
+  // });
+
+  const saved = await prisma.message.create({
     data: { conversationId: id, role: "user", content },
+    select: { id: true },
   });
+
+  res.setHeader("X-User-Message-Id", String(saved.id));
 
   // Temporary title from the first message (the model replaces it later)
   if (conversation.title === "New chat") {
@@ -293,6 +400,69 @@ router.post("/:id/regenerate", modelLimiter, async (req, res) => {
   }
 
   await streamReply(id, res);
+});
+
+// PATCH /api/conversations/:id: rename a chat
+router.patch("/:id", async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid conversation id" });
+
+  const data = parseBody(renameSchema, req.body, res);
+  if (!data) return;
+
+  const userId = res.locals.userId as number;
+  const conversation = await prisma.conversation.findFirst({ where: { id, userId } });
+  if (!conversation) return res.status(404).json({ error: "Conversation not found" });
+
+  const updated = await prisma.conversation.update({
+    where: { id },
+    // Keep the old updatedAt so renaming doesn't move the chat to the top
+    data: { title: data.title, updatedAt: conversation.updatedAt },
+    select: { id: true, title: true, createdAt: true, updatedAt: true },
+  });
+  res.json(updated);
+});
+
+// POST /api/conversations/:id/messages/:messageId/edit
+// Changes a user message, deletes everything after it, and streams a new reply
+router.post("/:id/messages/:messageId/edit", modelLimiter, async (req, res) => {
+  const id = parseId(req.params.id as string);
+  const messageId = parseId(req.params.messageId as string);
+  if (!id || !messageId) return res.status(400).json({ error: "Invalid id" });
+
+  const data = parseBody(chatSchema, req.body, res);
+  if (!data) return;
+
+  const userId = res.locals.userId as number;
+  const conversation = await prisma.conversation.findFirst({ where: { id, userId } });
+  if (!conversation) return res.status(404).json({ error: "Conversation not found" });
+
+  const message = await prisma.message.findFirst({
+    where: { id: messageId, conversationId: id, role: "user" },
+  });
+  if (!message) return res.status(404).json({ error: "Message not found" });
+
+  const next = await prisma.message.findFirst({
+    where: { conversationId: id, id: { gt: messageId } },
+    orderBy: { id: "asc" },
+  });
+
+  // Messages are ordered by id, so a new reply can't be inserted into the middle.
+  // This only happens if an earlier reply failed and the user kept chatting.
+  if (next && next.role !== "assistant") {
+    return res
+      .status(409)
+      .json({ error: "This prompt has no reply to replace. Send a new message instead." });
+  }
+
+  // await prisma.$transaction([
+  //   prisma.message.deleteMany({ where: { conversationId: id, id: { gt: messageId } } }),
+  //   prisma.message.update({ where: { id: messageId }, data: { content: data.content } }),
+  // ]);
+  await prisma.message.update({ where: { id: messageId }, data: { content: data.content } });
+
+  await streamReply(id, res, { upToMessageId: messageId, replaceMessageId: next?.id });
+  //await streamReply(id, res);
 });
 
 export default router;
