@@ -123,7 +123,9 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
   const [streamIndex, setStreamIndex] = useState<number | null>(null); // which message is being written
-
+  const [floating, setFloating] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [replyQuote, setReplyQuote] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -186,49 +188,58 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---------- helpers shared by send / regenerate / edit ---------- */
+  useEffect(() => {
+    let timer: number | undefined;
 
-  // function appendToken(token: string) {
-  //   setMessages((prev) => {
-  //     const copy = [...prev];
-  //     const last = copy[copy.length - 1];
-  //     copy[copy.length - 1] = { ...last, content: last.content + token };
-  //     return copy;
-  //   });
-  // }
+    const ownerOf = (node: Node | null) =>
+      (node instanceof Element ? node : node?.parentElement)?.closest(".msg.assistant") ?? null;
 
-  // // Runs when the server starts replying: attaches sources and the saved message id
-  // function handleStart(info: StreamStart) {
-  //   setMessages((prev) => {
-  //     const copy = [...prev];
-  //     const last = copy.length - 1;
-  //     if (last >= 0) {
-  //       copy[last] = { ...copy[last], sources: info.sources.length ? info.sources : null };
-  //     }
-  //     if (
-  //       info.userMessageId !== null &&
-  //       last >= 1 &&
-  //       copy[last - 1].role === "user" &&
-  //       copy[last - 1].id === undefined
-  //     ) {
-  //       copy[last - 1] = { ...copy[last - 1], id: info.userMessageId };
-  //     }
-  //     return copy;
-  //   });
-  // }
+    function check() {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        setFloating(null);
+        return;
+      }
 
-  // function showError(err: unknown) {
-  //   if ((err as Error).name === "AbortError") return;
-  //   setMessages((prev) => {
-  //     const copy = [...prev];
-  //     copy[copy.length - 1] = {
-  //       role: "assistant",
-  //       content: `Something went wrong: ${(err as Error).message}`,
-  //     };
-  //     return copy;
-  //   });
-  // }
+      const start = ownerOf(sel.anchorNode);
+      const end = ownerOf(sel.focusNode);
+      if (!start || start !== end) {
+        setFloating(null);
+        return;
+      }
 
+      const text = sel
+        .toString()
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      if (text.length < 2) {
+        setFloating(null);
+        return;
+      }
+
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      setFloating({
+        text,
+        x: Math.min(Math.max(rect.left + rect.width / 2, 60), window.innerWidth - 60),
+        y: Math.max(rect.top - 8, 48),
+    });
+  }
+
+  // Wait a moment so the button doesn't flicker while the user is still dragging
+  function onChange() {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(check, 200);
+  }
+
+  document.addEventListener("selectionchange", onChange);
+  return () => {
+    document.removeEventListener("selectionchange", onChange);
+    window.clearTimeout(timer);
+  };
+  }, []);
+
+  
   function appendTokenAt(index: number, token: string) {
     setMessages((prev) => {
       if (!prev[index]) return prev;
@@ -302,6 +313,8 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
     setDocuments([]);
     setInput("");
     setLoading(false);
+    setReplyQuote(null);
+    setFloating(null);
     setStreamIndex(null);
     setChatLoading(false);
     cancelEdit();
@@ -316,6 +329,8 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
     }
     abortRef.current?.abort(); // stop any reply still streaming
     setLoading(false);
+    setReplyQuote(null);
+    setFloating(null);
     setStreamIndex(null);
     setActiveId(id);
     setMessages([]);
@@ -423,113 +438,64 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
     }
   }
 
-  /* ---------- send / regenerate / edit ---------- */
-
-  // async function sendMessage() {
-  //   const text = input.trim();
-  //   if (!text || loading || chatLoading) return;
-
-  //   setInput("");
-  //   setLoading(true);
-  //   setMessages((prev) => [
-  //     ...prev,
-  //     { role: "user", content: text },
-  //     { role: "assistant", content: "" },
-  //   ]);
-
-  //   const controller = new AbortController();
-  //   abortRef.current = controller;
-
-  //   let titleForId: number | null = null;
-
-  //   try {
-  //     let id = activeId;
-  //     if (id === null) {
-  //       const created = await createConversation();
-  //       id = created.id;
-  //       setActiveId(id);
-  //     }
-  //     if (messages.length === 0) titleForId = id; // first message in this chat
-
-  //     await streamChat(id, text, handleStart, appendToken, controller.signal);
-  //   } catch (err) {
-  //     showError(err);
-  //   } finally {
-  //     setLoading(false);
-  //     refreshList();
-  //     if (titleForId !== null) {
-  //       generateTitle(titleForId).then(refreshList).catch(() => {});
-  //     }
-  //   }
-  // }
-
-  // async function regenerate() {
-  //   if (loading || activeId === null) return;
-  //   const last = messages[messages.length - 1];
-  //   if (!last || last.role !== "assistant") return;
-
-  //   setLoading(true);
-  //   setMessages((prev) => [...prev.slice(0, -1), { role: "assistant", content: "" }]);
-
-  //   const controller = new AbortController();
-  //   abortRef.current = controller;
-
-  //   try {
-  //     await regenerateReply(activeId, handleStart, appendToken, controller.signal);
-  //   } catch (err) {
-  //     showError(err);
-  //   } finally {
-  //     setLoading(false);
-  //     refreshList();
-  //   }
-  // }
+  function startReply() {
+    if (!floating) return;
+    const text = floating.text;
+    setReplyQuote(text.length > 1000 ? text.slice(0, 1000) + "…" : text);
+    setFloating(null);
+    window.getSelection()?.removeAllRanges();
+    inputRef.current?.focus();
+  }
 
   async function sendMessage() {
-  const text = input.trim();
-  if (!text || loading || chatLoading) return;
+    const text = input.trim();
+    if (!text || loading || chatLoading) return;
 
-  const replyIndex = messages.length + 1; // after the new prompt
-  setInput("");
-  setLoading(true);
-  setStreamIndex(replyIndex);
-  setMessages((prev) => [
-    ...prev,
-    { role: "user", content: text },
-    { role: "assistant", content: "" },
-  ]);
+    const quote = replyQuote;
+    const replyIndex = messages.length + 1; // after the new prompt
+    setInput("");
+    setReplyQuote(null);
+    setLoading(true);
+    setStreamIndex(replyIndex);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: text, quote },
+      { role: "assistant", content: "" },
+    ]);
 
-  const controller = new AbortController();
-  abortRef.current = controller;
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-  let titleForId: number | null = null;
+    let titleForId: number | null = null;
 
-  try {
-    let id = activeId;
-    if (id === null) {
-      const created = await createConversation();
-      id = created.id;
-      setActiveId(id);
-    }
-    if (messages.length === 0) titleForId = id; // first message in this chat
+    try {
+      let id = activeId;
+      if (id === null) {
+        const created = await createConversation();
+        id = created.id;
+        setActiveId(id);
+      }
+      if (messages.length === 0) titleForId = id; // first message in this chat
 
-    await streamChat(
-      id,
-      text,
-      (info) => handleStartAt(replyIndex, info),
-      (token) => appendTokenAt(replyIndex, token),
-      controller.signal
-    );
-  } catch (err) {
-    showErrorAt(replyIndex, err);
-  } finally {
-    setLoading(false);
-    setStreamIndex(null);
-    refreshList();
-    if (titleForId !== null) {
-      generateTitle(titleForId).then(refreshList).catch(() => {});
+      await streamChat(
+        id,
+        text,
+        quote ?? undefined,
+        (info) => handleStartAt(replyIndex, info),
+        (token) => appendTokenAt(replyIndex, token),
+        controller.signal
+      );
+    } catch (err) {
+      showErrorAt(replyIndex, err);
+    } finally {
+      setLoading(false);
+      setStreamIndex(null);
+      refreshList();
+      if (titleForId !== null) {
+        generateTitle(titleForId).then(refreshList).catch(() => {});
+      }
     }
   }
-}
 
   async function regenerate() {
     if (loading || activeId === null) return;
@@ -732,7 +698,16 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
       </aside>
 
       {sidebarOpen && <div className="backdrop" onClick={() => setSidebarOpen(false)} />}
-
+      {floating && (
+        <button
+          className="reply-float"
+          style={{ left: floating.x, top: floating.y }}
+          onMouseDown={(e) => e.preventDefault()} // keeps the text selected while clicking
+          onClick={startReply}
+        >
+          ↩ Reply
+        </button>
+      )}    
       <main className="main">
         <header className="topbar">
           <button
@@ -753,101 +728,12 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
           </button>
         </header>
 
-        <div className="chat">
+        <div className="chat" onScroll={() => setFloating(null)}>
           {chatLoading && <div className="welcome">Loading chat...</div>}
           {!chatLoading && messages.length === 0 && (
             <div className="welcome">How can I help you today?</div>
           )}
-
-          {/* {messages.map((m, i) => {
-            const isLast = i === messages.length - 1;
-            const streaming = loading && isLast && m.role === "assistant";
-            const editing = editingIndex === i;
-
-            return (
-              <Fragment key={i}>
-                {editing ? (
-                  <div className="edit-box">
-                    <textarea
-                      value={editValue}
-                      rows={3}
-                      autoFocus
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          saveEdit();
-                        }
-                        if (e.key === "Escape") cancelEdit();
-                      }}
-                    />
-                    <div className="edit-actions">
-                      <button className="action-btn" onClick={cancelEdit}>
-                        Cancel
-                      </button>
-                      <button
-                        className="action-btn primary"
-                        onClick={saveEdit}
-                        disabled={!editValue.trim()}
-                      >
-                        Save &amp; resend
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={`msg ${m.role}`}>
-                    {m.role === "assistant" ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {m.content || (loading ? "Thinking..." : "")}
-                      </ReactMarkdown>
-                    ) : (
-                      m.content
-                    )}
-                  </div>
-                )}
-
-                {m.role === "user" && m.id !== undefined && !loading && !editing && (
-                  <div className="msg-actions right">
-                    <button
-                      className="action-btn"
-                      onClick={() => startEdit(i)}
-                      title="Edit this message (removes the replies after it)"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                )}
-
-                {m.role === "assistant" && m.content && !streaming && (
-                  <div className="msg-actions">
-                    <CopyButton text={m.content} />
-                    {isLast && (
-                      <button className="action-btn" onClick={regenerate}>
-                        Regenerate
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {m.role === "assistant" && !streaming && m.sources && m.sources.length > 0 && (
-                  <details className="sources">
-                    <summary>Sources ({m.sources.length})</summary>
-                    <p className="sources-note">
-                      Excerpts from your documents that were given to the model for this answer.
-                    </p>
-                    {m.sources.map((s) => (
-                      <div key={s.n} className="source">
-                        <div className="source-title">
-                          📄 {s.filename} · Excerpt {s.n}
-                        </div>
-                        <p>{s.content}</p>
-                      </div>
-                    ))}
-                  </details>
-                )}
-              </Fragment>
-            );
-          })} */}
+          
           {messages.map((m, i) => {
             const isLast = i === messages.length - 1;
             const streaming = loading && streamIndex === i;
@@ -893,7 +779,10 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
                         {m.content || (streaming ? "Thinking..." : "")}
                       </ReactMarkdown>
                     ) : (
-                      m.content
+                      <>
+                        {m.quote && <div className="quote-block">{m.quote}</div>}
+                        {m.content}
+                      </>
                     )}
                   </div>
                 )}
@@ -959,6 +848,18 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
           </div>
         )}
 
+        {replyQuote && (
+          <div className="reply-bar">
+            <div className="reply-text">
+              <span className="reply-label">Replying to</span>
+              {replyQuote}
+            </div>
+            <button onClick={() => setReplyQuote(null)} aria-label="Cancel reply">
+              ×
+            </button>
+          </div>
+        )}
+
         <div className="input-row">
           <input
             ref={fileInputRef}
@@ -976,10 +877,18 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
             {uploading ? "Reading..." : "📎"}
           </button>
           <input
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            placeholder={documents.length ? "Ask about your document..." : "Ask anything..."}
+            //placeholder={documents.length ? "Ask about your document..." : "Ask anything..."}
+            placeholder={
+              replyQuote
+                ? "Reply to the selected text..."
+                : documents.length
+                ? "Ask about your document..."
+                : "Ask anything..."
+            }
           />
           {loading ? (
             <button onClick={stop}>Stop</button>

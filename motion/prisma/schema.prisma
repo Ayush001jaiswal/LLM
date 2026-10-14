@@ -37,6 +37,7 @@ model Message {
   id             Int          @id @default(autoincrement())
   role           String       // "user" or "assistant"
   content        String
+  quote          String?
   sources        Json?
   createdAt      DateTime     @default(now())
   conversationId Int

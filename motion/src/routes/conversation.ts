@@ -81,12 +81,107 @@ function parseId(value: string): number | null {
 //   res.end();
 // }
 
+// What the model reads for a user message. A quoted reply gets a short explanation added.
+function toModelContent(m: { role: string; content: string; quote: string | null }): string {
+  if (m.role === "user" && m.quote) {
+    return (
+      `The user is replying to this part of your previous answer:\n"""\n${m.quote}\n"""\n\n` +
+      `Their message: ${m.content}`
+    );
+  }
+  return m.content;
+}
+
+// async function streamReply(
+//   conversationId: number,
+//   res: Response,
+//   opts: { upToMessageId?: number; replaceMessageId?: number } = {}
+// ): Promise<void> {
+//   // History: the last 8 messages, but only up to the edited prompt when editing
+//   const recent = await prisma.message.findMany({
+//     where: {
+//       conversationId,
+//       ...(opts.upToMessageId ? { id: { lte: opts.upToMessageId } } : {}),
+//     },
+//     orderBy: { id: "desc" },
+//     take: 8,
+//   });
+//   const history = recent.reverse().map((m) => ({
+//     role: m.role as Role,
+//     content: m.content,
+//   }));
+
+//   const controller = new AbortController();
+//   res.on("close", () => controller.abort());
+
+//   let context: string | undefined;
+//   let sources: Source[] | undefined;
+//   const lastUser = [...history].reverse().find((m) => m.role === "user");
+//   if (lastUser) {
+//     try {
+//       const found = await retrieveContext(conversationId, lastUser.content, controller.signal);
+//       if (found) {
+//         context = found.context;
+//         sources = found.sources;
+//       }
+//     } catch (err) {
+//       if ((err as Error).name !== "AbortError") console.error("Retrieval failed", err);
+//     }
+//   }
+
+//   let reply = "";
+//   let failure: Error | null = null;
+
+//   try {
+//     res.setHeader("Content-Type", "text/plain; charset=utf-8");
+//     if (sources?.length) {
+//       res.setHeader("X-Sources", Buffer.from(JSON.stringify(sources)).toString("base64"));
+//     }
+//     for await (const text of streamChat(history, controller.signal, context)) {
+//       reply += text;
+//       res.write(text);
+//     }
+//   } catch (err) {
+//     if ((err as Error).name !== "AbortError") failure = err as Error;
+//   }
+
+//   if (reply.trim()) {
+//     // An empty list clears old sources when a reply is overwritten
+//     const sourcesValue = JSON.parse(JSON.stringify(sources ?? []));
+
+//     if (opts.replaceMessageId) {
+//       // Overwrite the existing reply so it keeps its position in the chat
+//       await prisma.message.update({
+//         where: { id: opts.replaceMessageId },
+//         data: { content: reply, sources: sourcesValue },
+//       });
+//     } else {
+//       await prisma.message.create({
+//         data: { conversationId, role: "assistant", content: reply, sources: sourcesValue },
+//       });
+//     }
+//     await prisma.conversation.update({
+//       where: { id: conversationId },
+//       data: { updatedAt: new Date() },
+//     });
+//   }
+
+//   if (failure) {
+//     console.error(failure);
+//     if (!res.headersSent) res.status(500).json({ error: failure.message });
+//     else res.end();
+//     return;
+//   }
+//   res.end();
+// }
+
+// GET /api/conversations: list chats for the sidebar
+
 async function streamReply(
   conversationId: number,
   res: Response,
   opts: { upToMessageId?: number; replaceMessageId?: number } = {}
 ): Promise<void> {
-  // History: the last 8 messages, but only up to the edited prompt when editing
   const recent = await prisma.message.findMany({
     where: {
       conversationId,
@@ -95,20 +190,25 @@ async function streamReply(
     orderBy: { id: "desc" },
     take: 8,
   });
-  const history = recent.reverse().map((m) => ({
+  const rows = recent.reverse();
+  const history = rows.map((m) => ({
     role: m.role as Role,
-    content: m.content,
+    content: toModelContent(m),
   }));
 
   const controller = new AbortController();
   res.on("close", () => controller.abort());
 
+  // Search the documents using the question, plus the start of the quoted text if there is one
   let context: string | undefined;
   let sources: Source[] | undefined;
-  const lastUser = [...history].reverse().find((m) => m.role === "user");
+  const lastUser = [...rows].reverse().find((m) => m.role === "user");
   if (lastUser) {
+    const query = lastUser.quote
+      ? `${lastUser.quote.slice(0, 300)}\n${lastUser.content}`
+      : lastUser.content;
     try {
-      const found = await retrieveContext(conversationId, lastUser.content, controller.signal);
+      const found = await retrieveContext(conversationId, query, controller.signal);
       if (found) {
         context = found.context;
         sources = found.sources;
@@ -135,11 +235,9 @@ async function streamReply(
   }
 
   if (reply.trim()) {
-    // An empty list clears old sources when a reply is overwritten
     const sourcesValue = JSON.parse(JSON.stringify(sources ?? []));
 
     if (opts.replaceMessageId) {
-      // Overwrite the existing reply so it keeps its position in the chat
       await prisma.message.update({
         where: { id: opts.replaceMessageId },
         data: { content: reply, sources: sourcesValue },
@@ -163,8 +261,6 @@ async function streamReply(
   }
   res.end();
 }
-
-// GET /api/conversations: list chats for the sidebar
 router.get("/", async (_req, res) => {
   const userId = res.locals.userId as number;
   const conversations = await prisma.conversation.findMany({
@@ -215,7 +311,7 @@ router.get("/:id/messages", async (req, res) => {
   const messages = await prisma.message.findMany({
     where: { conversationId: id },
     orderBy: { id: "asc" },
-    select: { id: true, role: true, content: true, sources: true, createdAt: true },
+    select: { id: true, role: true, content: true, quote: true, sources: true, createdAt: true },
   });
   res.json({ conversation, messages });
 });
@@ -232,80 +328,7 @@ router.delete("/:id", async (req, res) => {
   res.status(204).end();
 });
 
-// POST /api/conversations/:id/chat: save user message, stream reply, save reply
-// router.post("/:id/chat", async (req, res) => {
-//   const id = parseId(req.params.id);
-//   if (!id) return res.status(400).json({ error: "Invalid conversation id" });
 
-//   const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
-//   if (!content) return res.status(400).json({ error: "content is required" });
-//   if (content.length > 4000) return res.status(400).json({ error: "Message too long" });
-
-//   const userId = res.locals.userId as number;
-//   const conversation = await prisma.conversation.findFirst({ where: { id, userId } });
-//   if (!conversation) return res.status(404).json({ error: "Conversation not found" });
-
-//   // 1. Save the user's message
-//   await prisma.message.create({
-//     data: { conversationId: id, role: "user", content },
-//   });
-
-//   // Simple auto-title from the first message
-//   if (conversation.title === "New chat") {
-//     await prisma.conversation.update({
-//       where: { id },
-//       data: { title: content.slice(0, 40) },
-//     });
-//   }
-
-//   // 2. Load the last 8 messages from the database as context
-//   const recent = await prisma.message.findMany({
-//     where: { conversationId: id },
-//     orderBy: { id: "desc" },
-//     take: 8,
-//   });
-//   const history = recent.reverse().map((m) => ({
-//     role: m.role as Role,
-//     content: m.content,
-//   }));
-
-//   // Stop generating if the user clicks Stop or closes the tab
-//   const controller = new AbortController();
-//   res.on("close", () => controller.abort());
-
-//   // 3. Stream the reply while collecting it
-//   let reply = "";
-//   let failure: Error | null = null;
-
-//   try {
-//     res.setHeader("Content-Type", "text/plain; charset=utf-8");
-//     for await (const text of streamChat(history, controller.signal)) {
-//       reply += text;
-//       res.write(text);
-//     }
-//   } catch (err) {
-//     if ((err as Error).name !== "AbortError") failure = err as Error;
-//   }
-
-//   // 4. Save the assistant reply (also saves the partial text if the user hit Stop)
-//   if (reply.trim()) {
-//     await prisma.message.create({
-//       data: { conversationId: id, role: "assistant", content: reply },
-//     });
-//     await prisma.conversation.update({
-//         where: { id },
-//         data: { updatedAt: new Date() },
-//     });
-//   }
-
-//   if (failure) {
-//     console.error(failure);
-//     if (!res.headersSent) res.status(500).json({ error: failure.message });
-//     else res.end();
-//     return;
-//   }
-//   res.end();
-// });
 // POST /api/conversations/:id/chat: save user message, stream reply, save reply
 router.post("/:id/chat", modelLimiter, async (req, res) => {
   const id = parseId(req.params.id as string);
@@ -320,12 +343,8 @@ router.post("/:id/chat", modelLimiter, async (req, res) => {
   const conversation = await prisma.conversation.findFirst({ where: { id, userId } });
   if (!conversation) return res.status(404).json({ error: "Conversation not found" });
 
-  // await prisma.message.create({
-  //   data: { conversationId: id, role: "user", content },
-  // });
-
   const saved = await prisma.message.create({
-    data: { conversationId: id, role: "user", content },
+    data: { conversationId: id, role: "user", content, quote: data.quote || null },
     select: { id: true },
   });
 

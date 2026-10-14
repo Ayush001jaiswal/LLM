@@ -25,6 +25,7 @@ export const chatSchema = z.object({
     .trim()
     .min(1, "Message cannot be empty")
     .max(4000, "Message too long (max 4000 characters)"),
+    quote: z.string().trim().max(1500, "Quoted text is too long").optional(),
 });
 
 export const createConversationSchema = z.object({
