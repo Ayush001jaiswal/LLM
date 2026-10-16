@@ -14,15 +14,30 @@ import documentsRouter from "./routes/documents.js";
 import { failStaleResumeJobs } from "./services/resume/jobs.js"; 
 
 const app = express();
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "http://localhost:5173";
+const rawOrigins = process.env.FRONTEND_ORIGIN ?? "http://localhost:5173";
+const allowedOrigins = rawOrigins.split(",").map((o) => o.trim().replace(/\/+$/, ""));
 
 app.use(helmet());
-app.use(cors(
-  { 
-    origin: FRONTEND_ORIGIN,
-    exposedHeaders: ["X-Sources", "X-User-Message-Id"], 
-  }
-));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, MCP, server-to-server)
+      if (!origin) return callback(null, true);
+      // Allow if explicit match or wildcard
+      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      // Allow Vercel preview deployments if vercel.app is permitted
+      if (origin.endsWith(".vercel.app") || origin.includes("localhost")) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+    exposedHeaders: ["X-Sources", "X-User-Message-Id"],
+  })
+);
+
 app.use(express.json({ limit: "100kb" })); // rejects huge bodies
 app.use("/api", apiLimiter);
 

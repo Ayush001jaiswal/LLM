@@ -53,9 +53,10 @@ export async function* streamChat(
   messages: ChatMessage[],
   signal: AbortSignal,
   context?: string,
-  tier: Tier = "fast"   // chat defaults to local (fast, private)
+  tier: Tier = "fast"
 ): AsyncGenerator<string> {
-  if (tier === "smart" && hasGemini()) {
+  const isCloudProduction = process.env.NODE_ENV === "production" || !process.env.OLLAMA_URL;
+  if ((tier === "smart" || isCloudProduction) && hasGemini()) {
     yield* geminiStreamChat(messages, signal, context);
   } else {
     yield* ollamaStreamChat(messages, signal, context);

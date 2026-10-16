@@ -116,3 +116,18 @@ export async function geminiGenerateTitle(
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Embeddings — drop-in fallback for embeddings.ts when Ollama is unavailable
+// ---------------------------------------------------------------------------
+export async function geminiEmbed(texts: string[]): Promise<number[][]> {
+  const client = getClient();
+  const response = await client.models.embedContent({
+    model: "gemini-embedding-001",
+    contents: texts,
+  });
+  if (!response.embeddings || response.embeddings.length === 0) {
+    throw new Error("Gemini returned empty embeddings.");
+  }
+  return response.embeddings.map((e) => e.values ?? []);
+}

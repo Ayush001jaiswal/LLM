@@ -1,4 +1,5 @@
-export const API = "http://localhost:5000/api";
+const BASE_URL = (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || "http://localhost:5000";
+export const API = BASE_URL.endsWith("/api") ? BASE_URL : `${BASE_URL.replace(/\/+$/, "")}/api`;
 const TOKEN_KEY = "token";
 
 export interface Conversation {
