@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "motion": {
+      "command": "node",
+      "args": [
+        "c:/Users/91932/Documents/LLM/motion/node_modules/tsx/dist/cli.mjs",
+        "src/mcp/server.ts"
+      ],
+      "cwd": "c:/Users/91932/Documents/LLM/motion"
+    }
+  }
+}
