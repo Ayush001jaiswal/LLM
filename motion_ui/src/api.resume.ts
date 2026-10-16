@@ -1,0 +1,111 @@
+import { API, authHeaders, ensureOk } from "./api";
+
+/* ---------- Types (they mirror the backend) ---------- */
+export type ResumeFormat = "pdf" | "docx";
+export type ResumeStatus =
+  | "queued" | "extracting" | "reviewed" | "improving" | "checking" | "ready" | "failed";
+
+export const isActive = (s: ResumeStatus): boolean =>
+  s === "queued" || s === "extracting" || s === "improving" || s === "checking";
+
+export interface ExperienceEntry {
+  title: string; company: string; location: string; start: string; end: string; bullets: string[];
+}
+export interface ProjectEntry { name: string; tech: string; bullets: string[] }
+export interface ResumeData {
+  contact: { name: string; email: string; phone: string; location: string; links: string[] };
+  summary: string;
+  experience: ExperienceEntry[];
+  projects: ProjectEntry[];
+}
+export interface AtsCheck { id: string; label: string; pass: boolean; detail: string; weight: number }
+export interface AtsReport {
+  score: number;
+  checks: AtsCheck[];
+  keywordCoverage: number | null;
+  matchedKeywords: string[];
+  missingKeywords: string[];
+  templateGuarantees: string[];
+  quantifiedBulletsPercent: number;
+  pages: number | null;
+}
+export interface Review {
+  report: AtsReport;
+  layout: string[];
+  layoutInspected: boolean;
+  warnings: string[];
+  removed: string[];
+  suggestions: string[];
+  spelling: { word: string; suggestion: string }[];
+  buzzwords: string[];
+}
+export interface ResumeNotes { warnings: string[]; removed: string[]; suggestions: string[]; fallbacks: string[] }
+
+export interface ResumeListItem {
+  id: number; filename: string; targetRole: string; status: ResumeStatus; createdAt: string;
+}
+export interface ResumeDetail extends ResumeListItem {
+  format: ResumeFormat;
+  progress: string;
+  error: string | null;
+  instructions: string | null;
+  original: ResumeData | null;
+  improved: ResumeData | null;
+  review: Review | null;
+  report: AtsReport | null;
+  notes: ResumeNotes | null;
+}
+
+/* ---------- Calls ---------- */
+export async function uploadResume(file: File, targetRole: string, jobDescription: string): Promise<{ id: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("targetRole", targetRole);
+  if (jobDescription.trim()) form.append("jobDescription", jobDescription);
+  const res = await fetch(`${API}/resumes`, { method: "POST", headers: authHeaders(), body: form });
+  await ensureOk(res);
+  return res.json();
+}
+
+// Rewrites the resume. `instructions` can contain style requests and true facts the person wants added.
+export async function improveResume(id: number, instructions: string): Promise<void> {
+  const res = await fetch(`${API}/resumes/${id}/improve`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ instructions }),
+  });
+  await ensureOk(res);
+}
+
+export async function listResumes(): Promise<ResumeListItem[]> {
+  const res = await fetch(`${API}/resumes`, { headers: authHeaders() });
+  await ensureOk(res);
+  return res.json();
+}
+
+export async function getResume(id: number): Promise<ResumeDetail> {
+  const res = await fetch(`${API}/resumes/${id}`, { headers: authHeaders() });
+  await ensureOk(res);
+  return res.json();
+}
+
+export async function deleteResume(id: number): Promise<void> {
+  const res = await fetch(`${API}/resumes/${id}`, { method: "DELETE", headers: authHeaders() });
+  await ensureOk(res);
+}
+
+// A plain link cannot send the login token, so the file is fetched and saved from memory
+export async function downloadResume(id: number, format: ResumeFormat, sourceName: string): Promise<void> {
+  const res = await fetch(`${API}/resumes/${id}/download?format=${format}`, { headers: authHeaders() });
+  await ensureOk(res);
+  const blob = await res.blob();
+  const base = sourceName.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "_") || "resume";
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${base}_ATS.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

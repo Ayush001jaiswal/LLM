@@ -1,23 +1,3 @@
-// import "dotenv/config";
-// import express from "express";
-// import cors from "cors";
-// import authRouter from "./routes/auth.js";
-// import conversationsRouter from "./routes/conversation.js";
-// import { requireAuth } from "./middleware/requireAuth.js";
-
-// const app = express();
-// app.use(cors({ origin: "http://localhost:5173" })); // only your frontend may call the API
-// app.use(express.json());
-
-// app.get("/api/health", (_req, res) => {
-//   res.json({ status: "ok" });
-// });
-
-// app.use("/api/auth", authRouter);
-// app.use("/api/conversations", requireAuth, conversationsRouter);
-
-// const PORT = Number(process.env.PORT ?? 5000);
-// app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
 import "dotenv/config";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
@@ -25,10 +5,12 @@ import cors from "cors";
 import helmet from "helmet";
 import authRouter from "./routes/auth.js";
 import conversationsRouter from "./routes/conversation.js";
+import resumesRouter from "./routes/resumes.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { apiLimiter } from "./middleware/rateLimits.js";
 import multer from "multer";
 import documentsRouter from "./routes/documents.js";
+import { failStaleResumeJobs } from "./services/resume/jobs.js"; 
 
 const app = express();
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "http://localhost:5173";
@@ -50,6 +32,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/conversations/:id/documents", requireAuth, documentsRouter);
 app.use("/api/conversations", requireAuth, conversationsRouter);
+app.use("/api/resumes", requireAuth, resumesRouter);   
 
 // Unknown routes
 app.use((_req, res) => {
@@ -76,6 +59,8 @@ app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (res.headersSent) return next(err); // mid-stream failure: let Express close the connection
   res.status(500).json({ error: "Something went wrong. Please try again." });
 });
+
+failStaleResumeJobs().catch(console.error); 
 
 const PORT = Number(process.env.PORT ?? 5000);
 app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));

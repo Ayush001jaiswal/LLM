@@ -1,4 +1,4 @@
-const API = "http://localhost:5000/api";
+export const API = "http://localhost:5000/api";
 const TOKEN_KEY = "token";
 
 export interface Conversation {
@@ -55,12 +55,12 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
 }
 
-function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+export  function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const token = getToken();
   return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
 }
 
-async function ensureOk(res: Response, isAuthCall = false): Promise<void> {
+export async function ensureOk(res: Response, isAuthCall = false): Promise<void> {
   if (res.ok) return;
   if (res.status === 401 && !isAuthCall) {
     clearToken();

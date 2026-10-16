@@ -25,6 +25,7 @@ import {
   register,
   setUnauthorizedHandler,
 } from "./api";
+import Resume from "./Resume";
 
 /* ------------------------------------------------------------------ */
 /* Dark mode                                                           */
@@ -105,9 +106,10 @@ interface ChatProps {
   onLogout: () => void;
   theme: Theme;
   onToggleTheme: () => void;
+  onOpenResume: () => void;
 }
 
-function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
+function Chat({ email, onLogout, theme, onToggleTheme, onOpenResume  }: ChatProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<number | null>(readChatIdFromUrl);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -634,7 +636,9 @@ function Chat({ email, onLogout, theme, onToggleTheme }: ChatProps) {
         <button className="new-chat" onClick={newChat}>
           + New chat
         </button>
-
+           <button className="new-chat" onClick={onOpenResume}>
+            📄 Resume optimizer
+        </button>
         <div className="chat-list">
           {conversations.length === 0 && <p className="empty-list">No chats yet</p>}
           {conversations.map((c) => (
@@ -910,6 +914,7 @@ export default function App() {
   const { theme, toggle } = useTheme();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checking, setChecking] = useState(() => getToken() !== null);
+  const [page, setPage] = useState<"chat" | "resume">("chat");
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -935,9 +940,11 @@ export default function App() {
     writeChatIdToUrl(null);
     clearToken();
     setUser(null);
+    setPage("chat");
   }
 
   if (checking) return <div className="center-screen">Loading...</div>;
   if (!user) return <Login onAuth={handleAuth} />;
-  return <Chat email={user.email} onLogout={handleLogout} theme={theme} onToggleTheme={toggle} />;
+  if (page === "resume") return <Resume onBack={() => setPage("chat")} />;
+  return <Chat email={user.email} onLogout={handleLogout} theme={theme} onToggleTheme={toggle} onOpenResume={() => setPage("resume")} />;
 }

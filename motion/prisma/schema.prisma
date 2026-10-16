@@ -18,6 +18,7 @@ model User {
   passwordHash  String
   createdAt     DateTime       @default(now())
   conversations Conversation[]
+  resumes       Resume[]
 }
 
 model Conversation {
@@ -68,3 +69,37 @@ model DocumentChunk {
 
   @@index([conversationId])
 }
+
+model Resume {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filename       String
+  format         String
+  targetRole     String
+  jobDescription String?
+  instructions   String?
+  status         String   @default("queued")
+  progress       String   @default("")
+  error          String?
+  original       Json?
+  improved       Json?
+  review         Json?
+  report         Json?
+  notes          Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  @@index([userId])
+}
+
+model KnowledgeChunk {
+  id        Int     @id @default(autoincrement())
+  source    String
+  topic     String
+  content   String
+  embedding Float[]
+
+  @@index([source])
+}
+
