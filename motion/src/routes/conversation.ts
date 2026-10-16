@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma.js";
-import { streamChat, generateTitle, Role } from "../services/llm.js";
+import { streamChat, generateTitle } from "../services/ai.js";
+import type { Role } from "../services/llm.js";
 import type { Response } from "express";
 import { modelLimiter } from "../middleware/rateLimits.js";
 import { parseBody, chatSchema, createConversationSchema, renameSchema  } from "../validation.js";

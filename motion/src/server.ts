@@ -6,6 +6,7 @@ import helmet from "helmet";
 import authRouter from "./routes/auth.js";
 import conversationsRouter from "./routes/conversation.js";
 import resumesRouter from "./routes/resumes.js";
+import jobsRouter from "./routes/jobs.js";
 import { requireAuth } from "./middleware/requireAuth.js";
 import { apiLimiter } from "./middleware/rateLimits.js";
 import multer from "multer";
@@ -32,7 +33,8 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/conversations/:id/documents", requireAuth, documentsRouter);
 app.use("/api/conversations", requireAuth, conversationsRouter);
-app.use("/api/resumes", requireAuth, resumesRouter);   
+app.use("/api/resumes/:id/jobs", requireAuth, jobsRouter);
+app.use("/api/resumes", requireAuth, resumesRouter);
 
 // Unknown routes
 app.use((_req, res) => {

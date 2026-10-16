@@ -1,4 +1,4 @@
-import { generateJson } from "../ollamaJson.js";
+import { generateJson } from "../ai.js";
 import type {
   Contact,
   EducationEntry,

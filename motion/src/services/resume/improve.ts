@@ -1,4 +1,4 @@
-import { generateJson } from "../ollamaJson.js";
+import { generateJson } from "../ai.js";
 import { numbersIn, firstWord, keywordsPresent } from "./ats.js";
 import { asStr, asStrArr, stripBullet } from "./parse.js";
 import { findBuzzwords, profileLine, repeatedVerbs } from "./style.js";
@@ -77,6 +77,19 @@ const STYLE_RULES =
   "Vary the opening verbs: do not start more than two bullets in the same job with the same word. " +
   "Spelling, grammar and punctuation must be correct.";
 
+const REWRITE_EXAMPLES =
+  "\n\nFEW-SHOT EXAMPLES:\n" +
+  "Example 1:\n" +
+  "Input bullets:\n" +
+  "1. Responsible for working on the payment gateway APIs using Node.js and Express.\n" +
+  "2. Helped improve the database queries in PostgreSQL.\n" +
+  "Output: {\"bullets\": [\"Architected and maintained payment gateway REST APIs using Node.js and Express, ensuring secure transaction processing.\", \"Optimized complex PostgreSQL queries and indexing strategies to significantly reduce API response latency.\"]}\n\n" +
+  "Example 2:\n" +
+  "Input bullets:\n" +
+  "1. Worked on user interface of our e-commerce web app using React.\n" +
+  "2. Made sure the website was responsive on mobile phones.\n" +
+  "Output: {\"bullets\": [\"Engineered customer-facing e-commerce web interfaces using React and modern CSS, delivering seamless browsing experiences.\", \"Refactored layouts with responsive mobile-first design principles, ensuring cross-browser and multi-device compatibility.\"]}";
+
 const REWRITE_RULES =
   "You improve resume bullet points.\n" +
   "1. Use ONLY facts that are in the original bullets or in the candidate's instructions. NEVER add numbers, percentages, tools, technologies, employers, team sizes or results that are not there.\n" +
@@ -84,7 +97,8 @@ const REWRITE_RULES =
   "3. One line per bullet, 8 to 25 words. Remove filler such as 'responsible for' and 'worked on'.\n" +
   "4. Keep the same meaning and the same number of bullets. If a bullet is already strong, only fix its grammar.\n" +
   `5. ${STYLE_RULES}\n` +
-  'Return JSON only: {"bullets": ["..."]}';
+  REWRITE_EXAMPLES +
+  '\n\nReturn JSON only: {"bullets": ["..."]}';
 
 const GRAMMAR_RULES =
   "You are a proofreader. Fix ONLY spelling, grammar, punctuation and capitalisation in each bullet. " +

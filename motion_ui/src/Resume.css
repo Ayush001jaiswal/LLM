@@ -84,3 +84,106 @@
 .rs-chips button:hover { background: var(--hover); }
 .rs-instr { display: block; width: 100%; margin-bottom: 10px; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); font: inherit; }
 .rs-chip.reviewed { background: #dbeafe; color: #1e40af; }
+
+
+/* =========================================================
+   Job Match Panel
+   ========================================================= */
+.jm-panel {
+  padding: 1.5rem;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.jm-panel.jm-disabled { opacity: 0.5; }
+
+.jm-heading { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem; }
+.jm-subheading { color: var(--c-muted, #666); font-size: 0.875rem; margin-bottom: 1.25rem; }
+
+/* Filters */
+.jm-filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; align-items: center; }
+.jm-input {
+  flex: 1; min-width: 200px;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+.jm-checkbox { display: flex; align-items: center; gap: 0.4rem; font-size: 0.875rem; cursor: pointer; }
+.jm-btn {
+  padding: 0.45rem 1.1rem;
+  background: #2563eb; color: #fff;
+  border: none; border-radius: 6px;
+  font-size: 0.875rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+}
+.jm-btn:hover:not(:disabled) { background: #1d4ed8; }
+.jm-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Loading */
+.jm-loading { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 2rem; text-align: center; color: #555; }
+.jm-spinner {
+  width: 36px; height: 36px;
+  border: 3px solid #e0e7ff;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Errors / Warnings */
+.jm-error { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; padding: 0.75rem 1rem; color: #b91c1c; margin-bottom: 1rem; font-size: 0.875rem; }
+.jm-warnings { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.875rem; color: #92400e; }
+
+/* Profile insight */
+.jm-profile { margin-bottom: 1.25rem; border: 1px solid #e0e7ff; border-radius: 8px; overflow: hidden; }
+.jm-profile summary { padding: 0.65rem 1rem; cursor: pointer; font-size: 0.875rem; font-weight: 600; background: #f0f5ff; user-select: none; }
+.jm-profile-body { padding: 0.75rem 1rem; font-size: 0.825rem; color: #374151; display: flex; flex-direction: column; gap: 0.35rem; }
+.jm-profile-body ul { margin: 0.25rem 0 0 1.25rem; padding: 0; }
+.jm-profile-body li { margin-bottom: 0.2rem; }
+
+/* Job cards */
+.jm-count { font-size: 0.85rem; color: #6b7280; margin-bottom: 0.75rem; }
+.jm-cards { display: flex; flex-direction: column; gap: 1rem; }
+
+.jm-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  background: #fff;
+  display: flex; flex-direction: column; gap: 0.45rem;
+}
+.jm-card:hover { border-color: #93c5fd; box-shadow: 0 2px 8px rgba(37,99,235,0.07); }
+
+.jm-card-header { display: flex; justify-content: space-between; align-items: center; }
+
+/* Score badge */
+.jm-score { font-size: 0.8rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 999px; }
+.jm-score-great { background: #d1fae5; color: #065f46; }
+.jm-score-good  { background: #dbeafe; color: #1e40af; }
+.jm-score-ok    { background: #fef9c3; color: #92400e; }
+
+.jm-posted { font-size: 0.78rem; color: #9ca3af; }
+
+.jm-title { font-size: 1rem; font-weight: 700; margin: 0; }
+.jm-meta  { font-size: 0.82rem; color: #6b7280; display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0; }
+.jm-dot   { color: #d1d5db; }
+.jm-salary { color: #16a34a; font-weight: 600; }
+
+.jm-reason { font-size: 0.845rem; color: #374151; font-style: italic; margin: 0; }
+
+.jm-skills { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.jm-skill  { background: #eff6ff; color: #1d4ed8; font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; }
+
+.jm-gaps { font-size: 0.78rem; color: #b45309; margin: 0; }
+
+.jm-apply {
+  align-self: flex-end;
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.85rem;
+  background: #2563eb; color: #fff;
+  border-radius: 6px; text-decoration: none;
+  font-size: 0.8rem; font-weight: 600;
+}
+.jm-apply:hover { background: #1d4ed8; }
+
+.jm-empty { color: #6b7280; font-size: 0.9rem; padding: 1rem 0; }

@@ -109,3 +109,56 @@ export async function downloadResume(id: number, format: ResumeFormat, sourceNam
   a.remove();
   URL.revokeObjectURL(url);
 }
+/* ---------- Job Matching Types ---------- */
+export interface JobMatch {
+  rank: number;
+  score: number;
+  title: string;
+  company: string;
+  location: string;
+  salary: string | null;
+  postedAt: string;
+  url: string;
+  snippet: string;
+  matchedSkills: string[];
+  fitReason: string;
+  gaps: string[];
+}
+
+export interface InferredProfile {
+  inferredDomains: string[];
+  technicalDepth: string;
+  careerTrajectory: string;
+  cultureSignals: string[];
+  seniorityBand: string;
+  searchQueries: string[];
+  hardExclusions: string[];
+  allSkills: string[];
+}
+
+export interface JobSearchResult {
+  jobs: JobMatch[];
+  profile: InferredProfile;
+  warnings: string[];
+}
+
+export interface JobSearchParams {
+  location?: string;
+  remoteOnly?: boolean;
+  limit?: number;
+}
+
+/* ---------- API Call ---------- */
+export async function findJobs(
+  resumeId: number,
+  params: JobSearchParams = {}
+): Promise<JobSearchResult> {
+  const { API, authHeaders, ensureOk } = await import("./api");
+  const res = await fetch(`${API}/resumes/${resumeId}/jobs`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(params),
+  });
+  await ensureOk(res);
+  return res.json();
+}

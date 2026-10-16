@@ -11,6 +11,7 @@ import {
   uploadResume,
 } from "./api.resume";
 import type { AtsReport, ResumeDetail, ResumeFormat, ResumeListItem } from "./api.resume";
+import JobMatchPanel from "./JobMatchPanel";
 
 const STATUS_LABEL: Record<string, string> = {
   queued: "Waiting",
@@ -110,8 +111,10 @@ export default function Resume({ onBack }: { onBack: () => void }) {
         const d = await getResume(selectedId as number);
         if (cancelled) return;
         setDetail(d);
-        if (isActive(d.status)) timer = window.setTimeout(load, 4000);
-        else refreshList();
+        refreshList();
+        if (isActive(d.status)) {
+          timer = window.setTimeout(load, 2500);
+        }
       } catch (err) {
         if (!cancelled) setError((err as Error).message);
       }
@@ -160,10 +163,11 @@ export default function Resume({ onBack }: { onBack: () => void }) {
     setStarting(true);
     try {
       await improveResume(detail.id, instr.trim());
-      // Re-select to restart the status polling
+      setDetail((prev) => prev ? { ...prev, status: "improving", progress: "Starting..." } : null);
+      // Trigger immediate poll
       const id = detail.id;
       setSelectedId(null);
-      setTimeout(() => setSelectedId(id), 0);
+      setTimeout(() => setSelectedId(id), 50);
       refreshList();
     } catch (err) {
       setError((err as Error).message);
@@ -504,6 +508,13 @@ export default function Resume({ onBack }: { onBack: () => void }) {
             ))}
           </section>
         </>
+      )}
+
+      {/* ---------- 5. Job Matching ---------- */}
+      {detail && (detail.status === "reviewed" || detail.status === "ready") && (
+        <section className="rs-card">
+          <JobMatchPanel resumeId={detail.id} resumeStatus={detail.status} />
+        </section>
       )}
     </div>
   );
