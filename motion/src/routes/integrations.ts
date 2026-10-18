@@ -9,13 +9,13 @@ const router = Router();
 const createServerSchema = z.object({
   name: z.string().min(1, "Name is required").max(60),
   serverType: z.enum(["slack", "gmail", "github", "custom"]).default("custom"),
-  url: z.string().url("Valid HTTP(S) URL is required"),
+  url: z.string().min(1, "URL or connection target is required"),
   headers: z.record(z.string(), z.string()).optional(),
 });
 
 const updateServerSchema = z.object({
   name: z.string().min(1).max(60).optional(),
-  url: z.string().url().optional(),
+  url: z.string().min(1).optional(),
   headers: z.record(z.string(), z.string()).optional(),
   enabled: z.boolean().optional(),
 });

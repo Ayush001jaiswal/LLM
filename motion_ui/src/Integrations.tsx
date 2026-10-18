@@ -16,20 +16,20 @@ interface IntegrationsProps {
 
 const PRESETS = [
   {
+    type: "gmail",
+    label: "✉️ Gmail MCP (Direct)",
+    defaultName: "Google Workspace / Gmail",
+    defaultUrl: "gmail://",
+    placeholderHeader: "",
+    hint: "Connects directly to your Gmail account to search emails and send messages with zero 401 errors.",
+  },
+  {
     type: "slack",
     label: "💬 Slack MCP",
     defaultName: "Slack Workspace",
     defaultUrl: "https://slack-mcp.onrender.com/sse",
     placeholderHeader: '{"Authorization": "Bearer xoxb-your-token"}',
     hint: "Connects to Slack to send messages, search channels, and manage notifications.",
-  },
-  {
-    type: "gmail",
-    label: "✉️ Gmail MCP",
-    defaultName: "Google Workspace / Gmail",
-    defaultUrl: "https://gmail-mcp.onrender.com/sse",
-    placeholderHeader: '{"Authorization": "Bearer ya29.a0..."}',
-    hint: "Connects to Gmail to search job emails, draft messages, and read correspondence.",
   },
   {
     type: "github",
@@ -56,10 +56,13 @@ export default function Integrations({ onBack }: IntegrationsProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Form State
-  const [selectedPreset, setSelectedPreset] = useState("slack");
-  const [name, setName] = useState("Slack Workspace");
-  const [url, setUrl] = useState("https://slack-mcp.onrender.com/sse");
-  const [headersJson, setHeadersJson] = useState('{"Authorization": "Bearer xoxb-your-token"}');
+  const [selectedPreset, setSelectedPreset] = useState("gmail");
+  const [name, setName] = useState("Google Workspace / Gmail");
+  const [url, setUrl] = useState("gmail://");
+  const [headersJson, setHeadersJson] = useState("");
+  const [gmailEmail, setGmailEmail] = useState("");
+  const [gmailAppPassword, setGmailAppPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
@@ -88,31 +91,59 @@ export default function Integrations({ onBack }: IntegrationsProps) {
 
   async function handleAddServer(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !url.trim()) return;
-
     setError(null);
-    setConnecting(true);
 
-    let parsedHeaders: Record<string, string> | undefined;
-    if (headersJson.trim()) {
-      try {
-        parsedHeaders = JSON.parse(headersJson);
-      } catch {
-        setError("Headers must be valid JSON, e.g. {\"Authorization\": \"Bearer ...\"}");
-        setConnecting(false);
+    let finalName = name.trim();
+    let finalUrl = url.trim();
+    let finalHeaders: Record<string, string> | undefined;
+
+    if (selectedPreset === "gmail") {
+      const cleanEmail = gmailEmail.trim();
+      const cleanPassword = gmailAppPassword.replace(/\s+/g, "");
+
+      if (!cleanEmail || !cleanEmail.includes("@")) {
+        setError("Please enter a valid Gmail address (e.g. user@gmail.com).");
         return;
+      }
+      if (!cleanPassword || cleanPassword.length < 8) {
+        setError("Please enter your 16-character Google App Password (e.g. abcd efgh ijkl mnop).");
+        return;
+      }
+
+      finalName = finalName || `Gmail (${cleanEmail})`;
+      finalUrl = `gmail://${cleanEmail}`;
+      finalHeaders = {
+        email: cleanEmail,
+        appPassword: cleanPassword,
+      };
+    } else {
+      if (!finalName || !finalUrl) {
+        setError("Connection Name and Endpoint URL are required.");
+        return;
+      }
+      if (headersJson.trim()) {
+        try {
+          finalHeaders = JSON.parse(headersJson);
+        } catch {
+          setError("Headers must be valid JSON, e.g. {\"Authorization\": \"Bearer ...\"}");
+          return;
+        }
       }
     }
 
+    setConnecting(true);
+
     try {
       const created = await addIntegration({
-        name: name.trim(),
+        name: finalName,
         serverType: selectedPreset,
-        url: url.trim(),
-        headers: parsedHeaders,
+        url: finalUrl,
+        headers: finalHeaders,
       });
       setServers((prev) => [created, ...prev]);
       setShowForm(false);
+      setGmailEmail("");
+      setGmailAppPassword("");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -195,9 +226,9 @@ export default function Integrations({ onBack }: IntegrationsProps) {
 
       {showForm && (
         <div className="mcp-card">
-          <h2>Connect Remote MCP Server</h2>
+          <h2>Connect MCP Server</h2>
           <div className="mcp-card-desc">
-            Choose a preset or connect any remote server exposing the Model Context Protocol (SSE transport).
+            Choose Gmail for instant direct connection, or connect any remote MCP server via SSE transport.
           </div>
 
           <div className="mcp-presets">
@@ -221,7 +252,7 @@ export default function Integrations({ onBack }: IntegrationsProps) {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. My Slack Team"
+                  placeholder={selectedPreset === "gmail" ? "My Gmail" : "e.g. My Slack Team"}
                   required
                 />
               </div>
@@ -229,45 +260,124 @@ export default function Integrations({ onBack }: IntegrationsProps) {
                 <label>Server Type</label>
                 <select
                   value={selectedPreset}
-                  onChange={(e) => setSelectedPreset(e.target.value)}
+                  onChange={(e) => {
+                    const found = PRESETS.find((p) => p.type === e.target.value);
+                    if (found) handleSelectPreset(found);
+                  }}
                 >
+                  <option value="gmail">Gmail (Direct Native MCP)</option>
                   <option value="slack">Slack</option>
-                  <option value="gmail">Gmail</option>
                   <option value="github">GitHub</option>
                   <option value="custom">Custom MCP</option>
                 </select>
               </div>
             </div>
 
-            <div className="mcp-field">
-              <label>Remote MCP Endpoint URL (SSE)</label>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://your-mcp-server.com/sse"
-                required
-              />
-              <small>Must be an HTTPS or HTTP endpoint providing Server-Sent Events (SSE).</small>
-            </div>
+            {selectedPreset === "gmail" ? (
+              <>
+                <div className="mcp-field">
+                  <label>Gmail Address</label>
+                  <input
+                    type="email"
+                    value={gmailEmail}
+                    onChange={(e) => setGmailEmail(e.target.value)}
+                    placeholder="e.g. yourname@gmail.com"
+                    required
+                  />
+                </div>
 
-            <div className="mcp-field">
-              <label>Authorization Headers (JSON optional)</label>
-              <textarea
-                rows={2}
-                value={headersJson}
-                onChange={(e) => setHeadersJson(e.target.value)}
-                placeholder='{"Authorization": "Bearer your-token"}'
-              />
-              <small>Sent in both the SSE handshake and message POST requests.</small>
-            </div>
+                <div className="mcp-field">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label>16-Character Google App Password</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#60a5fa",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={gmailAppPassword}
+                    onChange={(e) => setGmailAppPassword(e.target.value)}
+                    placeholder="e.g. abcd efgh ijkl mnop"
+                    autoComplete="off"
+                    required
+                  />
+                  <small>Spaces don't matter; they will be removed automatically.</small>
+                </div>
+
+                <div className="mcp-gmail-guide">
+                  <div className="mcp-gmail-guide-title">
+                    🔑 How to get your Google App Password (takes 30 seconds):
+                  </div>
+                  <ol className="mcp-gmail-steps">
+                    <li>
+                      Ensure <strong>2-Step Verification</strong> is ON in your Google Account.
+                    </li>
+                    <li>
+                      Open{" "}
+                      <a
+                        href="https://myaccount.google.com/apppasswords"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mcp-external-link"
+                      >
+                        myaccount.google.com/apppasswords ↗
+                      </a>
+                    </li>
+                    <li>
+                      Type <strong>Motion</strong> in the App name field and click <strong>Create</strong>.
+                    </li>
+                    <li>
+                      Copy the 16-character code (e.g. <code>abcd efgh ijkl mnop</code>) and paste it above!
+                    </li>
+                  </ol>
+                  <div className="mcp-gmail-note">
+                    🛡️ <strong>Zero 401 Errors:</strong> Connects directly to Google's official SMTP/IMAP servers. Bypasses Composio and interactive popups completely with 100% reliable uptime.
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mcp-field">
+                  <label>Remote MCP Endpoint URL (SSE)</label>
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://your-mcp-server.com/sse"
+                    required
+                  />
+                  <small>Must be an HTTPS or HTTP endpoint providing Server-Sent Events (SSE).</small>
+                </div>
+
+                <div className="mcp-field">
+                  <label>Authorization Headers (JSON optional)</label>
+                  <textarea
+                    rows={2}
+                    value={headersJson}
+                    onChange={(e) => setHeadersJson(e.target.value)}
+                    placeholder='{"Authorization": "Bearer your-token"}'
+                  />
+                  <small>Sent in both the SSE handshake and message POST requests.</small>
+                </div>
+              </>
+            )}
 
             <button
               type="submit"
               className="mcp-btn-primary"
               disabled={connecting}
             >
-              {connecting ? "Testing & Connecting..." : "Test & Add Server"}
+              {connecting ? "Testing & Connecting..." : selectedPreset === "gmail" ? "Connect Gmail Account" : "Test & Add Server"}
             </button>
           </form>
         </div>
@@ -317,7 +427,9 @@ export default function Integrations({ onBack }: IntegrationsProps) {
                     </label>
                   </div>
 
-                  <div className="mcp-server-url">{server.url}</div>
+                  <div className="mcp-server-url">
+                    {server.serverType === "gmail" ? `✉️ Direct Gmail (${server.url.replace("gmail://", "")})` : server.url}
+                  </div>
 
                   {server.error && (
                     <div style={{ color: "#f87171", fontSize: "12px", marginBottom: "8px" }}>

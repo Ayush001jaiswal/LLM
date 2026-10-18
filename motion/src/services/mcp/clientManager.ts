@@ -1,7 +1,11 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { prisma } from "../../db/prisma.js";
+import {
+  testGmailCredentials,
+  sendGmail,
+  searchGmail,
+} from "../email/gmail.js";
 
 export interface DiscoveredTool {
   name: string;
@@ -21,13 +25,59 @@ export interface ActiveToolInfo {
   tool: DiscoveredTool;
 }
 
+const NATIVE_GMAIL_TOOLS: DiscoveredTool[] = [
+  {
+    name: "gmail_search_emails",
+    description: "Searches your Gmail inbox for messages matching a subject, sender, or query.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query, keyword, or sender to filter emails" },
+        limit: { type: "number", description: "Maximum number of recent emails to return (default 5)" },
+      },
+    },
+  },
+  {
+    name: "gmail_send_email",
+    description: "Sends an email message directly from your connected Gmail account to a recipient.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "Recipient email address" },
+        subject: { type: "string", description: "Email subject line" },
+        body: { type: "string", description: "Body content of the email message" },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
+];
+
 /**
- * Tests an SSE MCP server connection and returns its available tools.
+ * Tests an MCP server connection and returns its available tools.
+ * Supports standard remote SSE endpoints and native Gmail connections.
  */
 export async function testMcpConnection(
   urlStr: string,
   headers?: Record<string, string>
 ): Promise<{ tools: DiscoveredTool[]; error?: string }> {
+  // 1. Native Gmail Handler (Zero external server required)
+  if (urlStr.startsWith("gmail://") || headers?.appPassword) {
+    const email = headers?.email || urlStr.replace("gmail://", "").trim();
+    const appPassword = headers?.appPassword;
+    if (!email || !appPassword) {
+      return {
+        tools: [],
+        error: "Gmail requires both your Gmail address and a 16-character Google App Password.",
+      };
+    }
+    const test = await testGmailCredentials(email, appPassword);
+    if (!test.success) {
+      return { tools: [], error: test.error || "Failed to authenticate with Gmail." };
+    }
+    return { tools: NATIVE_GMAIL_TOOLS };
+  }
+
+  // 2. Standard Remote SSE Transport
   let client: Client | null = null;
   try {
     const url = new URL(urlStr);
@@ -75,7 +125,7 @@ export async function testMcpConnection(
 }
 
 /**
- * Executes a tool on a remote MCP server via SSE transport.
+ * Executes a tool on a remote MCP server or native service.
  */
 export async function executeRemoteMcpTool(
   urlStr: string,
@@ -83,6 +133,41 @@ export async function executeRemoteMcpTool(
   toolName: string,
   args: Record<string, unknown>
 ): Promise<{ success: boolean; result?: unknown; error?: string }> {
+  // 1. Native Gmail Execution
+  if (urlStr.startsWith("gmail://") || headers?.appPassword || toolName.startsWith("gmail_")) {
+    const email = headers?.email || urlStr.replace("gmail://", "").trim();
+    const appPassword = headers?.appPassword;
+    if (!email || !appPassword) {
+      return { success: false, error: "Missing Gmail credentials (email or app password)." };
+    }
+
+    if (toolName === "gmail_send_email") {
+      const sendRes = await sendGmail(
+        email,
+        appPassword,
+        String(args.to || ""),
+        String(args.subject || ""),
+        String(args.body || "")
+      );
+      return sendRes.success
+        ? { success: true, result: `Email sent successfully! Message ID: ${sendRes.messageId}` }
+        : { success: false, error: sendRes.error };
+    }
+
+    if (toolName === "gmail_search_emails") {
+      const searchRes = await searchGmail(
+        email,
+        appPassword,
+        String(args.query || ""),
+        Number(args.limit || 5)
+      );
+      return searchRes.success
+        ? { success: true, result: searchRes.emails }
+        : { success: false, error: searchRes.error };
+    }
+  }
+
+  // 2. Standard Remote SSE Execution
   let client: Client | null = null;
   try {
     const url = new URL(urlStr);
