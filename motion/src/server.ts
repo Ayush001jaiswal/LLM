@@ -13,6 +13,7 @@ import multer from "multer";
 import documentsRouter from "./routes/documents.js";
 import mcpRouter, { handleSseConnect, handlePostMessage } from "./routes/mcp.js";
 import openapiRouter from "./routes/openapi.js";
+import integrationsRouter from "./routes/integrations.js";
 import { failStaleResumeJobs } from "./services/resume/jobs.js"; 
 
 const app = express();
@@ -52,6 +53,7 @@ app.use("/api/conversations/:id/documents", requireAuth, documentsRouter);
 app.use("/api/conversations", requireAuth, conversationsRouter);
 app.use("/api/resumes/:id/jobs", requireAuth, jobsRouter);
 app.use("/api/resumes", requireAuth, resumesRouter);
+app.use("/api/integrations", requireAuth, integrationsRouter);
 
 // Remote MCP (SSE) - For Claude, Cursor, and remote AI agents
 app.get("/sse", (req, res) => handleSseConnect(req, res, "/messages"));

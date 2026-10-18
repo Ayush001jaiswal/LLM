@@ -7,6 +7,7 @@ import { modelLimiter } from "../middleware/rateLimits.js";
 import { parseBody, chatSchema, createConversationSchema, renameSchema  } from "../validation.js";
 import { retrieveContext } from "../services/rag.js";
 import type { Source } from "../services/rag.js";
+import { getUserMcpTools } from "../services/mcp/clientManager.js";
 
 const router = Router();
 
@@ -219,6 +220,13 @@ async function streamReply(
     }
   }
 
+  // Load any active remote MCP tools configured by the user
+  const convo = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { userId: true },
+  });
+  const mcpTools = convo?.userId ? await getUserMcpTools(convo.userId) : [];
+
   let reply = "";
   let failure: Error | null = null;
 
@@ -227,7 +235,7 @@ async function streamReply(
     if (sources?.length) {
       res.setHeader("X-Sources", Buffer.from(JSON.stringify(sources)).toString("base64"));
     }
-    for await (const text of streamChat(history, controller.signal, context)) {
+    for await (const text of streamChat(history, controller.signal, context, "smart", mcpTools)) {
       reply += text;
       res.write(text);
     }

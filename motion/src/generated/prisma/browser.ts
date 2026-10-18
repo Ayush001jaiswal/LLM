@@ -52,3 +52,8 @@ export type Resume = Prisma.ResumeModel
  * 
  */
 export type KnowledgeChunk = Prisma.KnowledgeChunkModel
+/**
+ * Model McpServerConnection
+ * 
+ */
+export type McpServerConnection = Prisma.McpServerConnectionModel

@@ -403,7 +403,8 @@ export const ModelName = {
   Document: 'Document',
   DocumentChunk: 'DocumentChunk',
   Resume: 'Resume',
-  KnowledgeChunk: 'KnowledgeChunk'
+  KnowledgeChunk: 'KnowledgeChunk',
+  McpServerConnection: 'McpServerConnection'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -419,7 +420,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "conversation" | "message" | "document" | "documentChunk" | "resume" | "knowledgeChunk"
+    modelProps: "user" | "conversation" | "message" | "document" | "documentChunk" | "resume" | "knowledgeChunk" | "mcpServerConnection"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -941,6 +942,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    McpServerConnection: {
+      payload: Prisma.$McpServerConnectionPayload<ExtArgs>
+      fields: Prisma.McpServerConnectionFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.McpServerConnectionFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.McpServerConnectionFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload>
+        }
+        findFirst: {
+          args: Prisma.McpServerConnectionFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.McpServerConnectionFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload>
+        }
+        findMany: {
+          args: Prisma.McpServerConnectionFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload>[]
+        }
+        create: {
+          args: Prisma.McpServerConnectionCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload>
+        }
+        createMany: {
+          args: Prisma.McpServerConnectionCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.McpServerConnectionCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload>[]
+        }
+        delete: {
+          args: Prisma.McpServerConnectionDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload>
+        }
+        update: {
+          args: Prisma.McpServerConnectionUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload>
+        }
+        deleteMany: {
+          args: Prisma.McpServerConnectionDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.McpServerConnectionUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.McpServerConnectionUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload>[]
+        }
+        upsert: {
+          args: Prisma.McpServerConnectionUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$McpServerConnectionPayload>
+        }
+        aggregate: {
+          args: Prisma.McpServerConnectionAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateMcpServerConnection>
+        }
+        groupBy: {
+          args: Prisma.McpServerConnectionGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.McpServerConnectionGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.McpServerConnectionCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.McpServerConnectionCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -1070,6 +1145,25 @@ export const KnowledgeChunkScalarFieldEnum = {
 export type KnowledgeChunkScalarFieldEnum = (typeof KnowledgeChunkScalarFieldEnum)[keyof typeof KnowledgeChunkScalarFieldEnum]
 
 
+export const McpServerConnectionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  name: 'name',
+  serverType: 'serverType',
+  url: 'url',
+  headers: 'headers',
+  enabled: 'enabled',
+  tools: 'tools',
+  lastTestedAt: 'lastTestedAt',
+  status: 'status',
+  error: 'error',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type McpServerConnectionScalarFieldEnum = (typeof McpServerConnectionScalarFieldEnum)[keyof typeof McpServerConnectionScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -1184,6 +1278,13 @@ export type ListFloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaMode
  * Reference to a field of type 'Float'
  */
 export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
+    
+
+
+/**
+ * Reference to a field of type 'Boolean'
+ */
+export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Boolean'>
     
 
 /**
@@ -1344,6 +1445,7 @@ export type GlobalOmitConfig = {
   documentChunk?: Prisma.DocumentChunkOmit
   resume?: Prisma.ResumeOmit
   knowledgeChunk?: Prisma.KnowledgeChunkOmit
+  mcpServerConnection?: Prisma.McpServerConnectionOmit
 }
 
 /* Types for Logging */

@@ -13,12 +13,13 @@ datasource db {
 }
 
 model User {
-  id            Int            @id @default(autoincrement())
-  email         String         @unique
+  id            Int                   @id @default(autoincrement())
+  email         String                @unique
   passwordHash  String
-  createdAt     DateTime       @default(now())
+  createdAt     DateTime              @default(now())
   conversations Conversation[]
   resumes       Resume[]
+  mcpServers    McpServerConnection[]
 }
 
 model Conversation {
@@ -101,5 +102,24 @@ model KnowledgeChunk {
   embedding Float[]
 
   @@index([source])
+}
+
+model McpServerConnection {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  serverType   String    @default("custom") // "slack", "gmail", "github", "custom"
+  url          String
+  headers      Json?
+  enabled      Boolean   @default(true)
+  tools        Json?
+  lastTestedAt DateTime?
+  status       String    @default("connected") // "connected", "error", "pending"
+  error        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@index([userId])
 }
 

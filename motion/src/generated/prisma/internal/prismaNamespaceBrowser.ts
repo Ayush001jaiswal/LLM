@@ -57,7 +57,8 @@ export const ModelName = {
   Document: 'Document',
   DocumentChunk: 'DocumentChunk',
   Resume: 'Resume',
-  KnowledgeChunk: 'KnowledgeChunk'
+  KnowledgeChunk: 'KnowledgeChunk',
+  McpServerConnection: 'McpServerConnection'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -164,6 +165,25 @@ export const KnowledgeChunkScalarFieldEnum = {
 } as const
 
 export type KnowledgeChunkScalarFieldEnum = (typeof KnowledgeChunkScalarFieldEnum)[keyof typeof KnowledgeChunkScalarFieldEnum]
+
+
+export const McpServerConnectionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  name: 'name',
+  serverType: 'serverType',
+  url: 'url',
+  headers: 'headers',
+  enabled: 'enabled',
+  tools: 'tools',
+  lastTestedAt: 'lastTestedAt',
+  status: 'status',
+  error: 'error',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type McpServerConnectionScalarFieldEnum = (typeof McpServerConnectionScalarFieldEnum)[keyof typeof McpServerConnectionScalarFieldEnum]
 
 
 export const SortOrder = {

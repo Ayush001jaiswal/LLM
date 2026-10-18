@@ -26,6 +26,7 @@ import {
   setUnauthorizedHandler,
 } from "./api";
 import Resume from "./Resume";
+import Integrations from "./Integrations";
 
 /* ------------------------------------------------------------------ */
 /* Dark mode                                                           */
@@ -107,9 +108,10 @@ interface ChatProps {
   theme: Theme;
   onToggleTheme: () => void;
   onOpenResume: () => void;
+  onOpenIntegrations: () => void;
 }
 
-function Chat({ email, onLogout, theme, onToggleTheme, onOpenResume  }: ChatProps) {
+function Chat({ email, onLogout, theme, onToggleTheme, onOpenResume, onOpenIntegrations }: ChatProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<number | null>(readChatIdFromUrl);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -636,8 +638,11 @@ function Chat({ email, onLogout, theme, onToggleTheme, onOpenResume  }: ChatProp
         <button className="new-chat" onClick={newChat}>
           + New chat
         </button>
-           <button className="new-chat" onClick={onOpenResume}>
-            📄 Resume optimizer
+        <button className="new-chat" onClick={onOpenResume}>
+          📄 Resume optimizer
+        </button>
+        <button className="new-chat" onClick={onOpenIntegrations}>
+          ⚡ MCP Integrations
         </button>
         <div className="chat-list">
           {conversations.length === 0 && <p className="empty-list">No chats yet</p>}
@@ -722,6 +727,14 @@ function Chat({ email, onLogout, theme, onToggleTheme, onOpenResume  }: ChatProp
             ☰
           </button>
           <h1>My Chat</h1>
+          <button
+            className="action-btn"
+            style={{ marginLeft: "auto", marginRight: "10px", fontSize: "13px", padding: "6px 12px", border: "1px solid var(--border)", borderRadius: "8px", background: "transparent", cursor: "pointer", color: "var(--text)" }}
+            onClick={onOpenIntegrations}
+            title="Configure Remote MCP Servers (Slack, Gmail, GitHub)"
+          >
+            ⚡ MCP Tools
+          </button>
           <button
             className="theme-btn"
             onClick={onToggleTheme}
@@ -914,7 +927,7 @@ export default function App() {
   const { theme, toggle } = useTheme();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checking, setChecking] = useState(() => getToken() !== null);
-  const [page, setPage] = useState<"chat" | "resume">("chat");
+  const [page, setPage] = useState<"chat" | "resume" | "integrations">("chat");
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -946,5 +959,15 @@ export default function App() {
   if (checking) return <div className="center-screen">Loading...</div>;
   if (!user) return <Login onAuth={handleAuth} />;
   if (page === "resume") return <Resume onBack={() => setPage("chat")} />;
-  return <Chat email={user.email} onLogout={handleLogout} theme={theme} onToggleTheme={toggle} onOpenResume={() => setPage("resume")} />;
+  if (page === "integrations") return <Integrations onBack={() => setPage("chat")} />;
+  return (
+    <Chat
+      email={user.email}
+      onLogout={handleLogout}
+      theme={theme}
+      onToggleTheme={toggle}
+      onOpenResume={() => setPage("resume")}
+      onOpenIntegrations={() => setPage("integrations")}
+    />
+  );
 }

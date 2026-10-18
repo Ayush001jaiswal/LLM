@@ -47,17 +47,20 @@ export async function generateJson<T>(
 }
 
 // ---------------------------------------------------------------------------
-// streamChat — streaming chat with optional RAG context
+import type { ActiveToolInfo } from "./mcp/clientManager.js";
+
+// streamChat — streaming chat with optional RAG context and MCP tools
 // ---------------------------------------------------------------------------
 export async function* streamChat(
   messages: ChatMessage[],
   signal: AbortSignal,
   context?: string,
-  tier: Tier = "fast"
+  tier: Tier = "fast",
+  tools?: ActiveToolInfo[]
 ): AsyncGenerator<string> {
   const isCloudProduction = process.env.NODE_ENV === "production" || !process.env.OLLAMA_URL;
   if ((tier === "smart" || isCloudProduction) && hasGemini()) {
-    yield* geminiStreamChat(messages, signal, context);
+    yield* geminiStreamChat(messages, signal, context, tools);
   } else {
     yield* ollamaStreamChat(messages, signal, context);
   }
