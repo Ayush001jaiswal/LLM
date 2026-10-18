@@ -293,6 +293,66 @@ async function fetchJSearchJobs(query: string, location: string): Promise<Market
   }
 }
 
+async function fetchRemoteOKJobs(query: string): Promise<MarketJob[]> {
+  const clean = query.replace(/[^\w\s]/g, " ").trim().split(" ")[0].toLowerCase();
+  const url = `https://remoteok.com/api?tag=${encodeURIComponent(clean || "dev")}`;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as any[];
+    if (!Array.isArray(data)) return [];
+    return data.slice(1, 25).map((j) => ({
+      id: `remoteok_${j.id || Math.random()}`,
+      title: j.position || "Developer",
+      company: { display_name: j.company || "Tech Company" },
+      location: { display_name: j.location || "Remote" },
+      salary_min: j.salary_min ? Number(j.salary_min) : undefined,
+      salary_max: j.salary_max ? Number(j.salary_max) : undefined,
+      created: j.date || new Date().toISOString(),
+      redirect_url: j.url || `https://remoteok.com`,
+      description: (j.description || "").replace(/<[^>]+>/g, " ").slice(0, 1000),
+      source: "RemoteOK",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Ensures diverse representation across all active job boards (Adzuna, Remotive, RemoteOK, Jobicy, Arbeitnow, LinkedIn/Indeed)
+ * by interleaving results round-robin instead of letting one board dominate the top results.
+ */
+function balanceSources(jobs: MarketJob[], maxTotal = 30): MarketJob[] {
+  const bySource: Record<string, MarketJob[]> = {};
+  for (const j of jobs) {
+    const src = j.source || "Market";
+    if (!bySource[src]) bySource[src] = [];
+    bySource[src].push(j);
+  }
+
+  const sources = Object.keys(bySource);
+  if (sources.length <= 1) return jobs.slice(0, maxTotal);
+
+  const balanced: MarketJob[] = [];
+  let added = true;
+  let idx = 0;
+
+  while (added && balanced.length < maxTotal) {
+    added = false;
+    for (const src of sources) {
+      if (idx < bySource[src].length && balanced.length < maxTotal) {
+        balanced.push(bySource[src][idx]);
+        added = true;
+      }
+    }
+    idx++;
+  }
+  return balanced;
+}
+
 // ---------------------------------------------------------------------------
 // Step 3 — Pre-filter
 // ---------------------------------------------------------------------------
@@ -439,11 +499,13 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     // 2. Remotive live global tech jobs
     fetchRemotiveJobs(targetRole),
     ...(topSkill ? [fetchRemotiveJobs(`${targetRole} ${topSkill}`)] : []),
-    // 3. Jobicy live engineering opportunities
+    // 3. RemoteOK live engineering board
+    fetchRemoteOKJobs(targetRole),
+    // 4. Jobicy live engineering opportunities
     fetchJobicyJobs(targetRole),
-    // 4. Arbeitnow tech board
+    // 5. Arbeitnow tech board
     fetchArbeitnowJobs(targetRole),
-    // 5. LinkedIn & Indeed (via JSearch / RapidAPI if configured)
+    // 6. LinkedIn & Indeed (via JSearch / RapidAPI if configured)
     fetchJSearchJobs(targetRole, searchLocation),
   ];
 
@@ -459,6 +521,7 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     const fallbackSettled = await Promise.allSettled([
       fetchAdzunaJobs(targetRole || "developer", searchLocation, remoteOnly),
       fetchRemotiveJobs("software developer"),
+      fetchRemoteOKJobs("developer"),
       fetchJobicyJobs("developer"),
       fetchArbeitnowJobs("developer"),
     ]);
@@ -468,12 +531,15 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     raw = deduplicateJobs(fallbackJobs);
   }
 
-  // Step 3 — Pre-filter
-  let candidates = preFilter(raw, profile).slice(0, 30);
+  // Step 3 — Pre-filter and balance across job boards
+  let filtered = preFilter(raw, profile);
   // If preFilter dropped too many, use raw jobs so the user gets results
-  if (candidates.length < 5 && raw.length > 0) {
-    candidates = raw.slice(0, 30);
+  if (filtered.length < 5 && raw.length > 0) {
+    filtered = raw;
   }
+
+  // Interleave sources so every job board has candidates evaluated by the LLM
+  let candidates = balanceSources(filtered, 25);
 
   if (candidates.length === 0) {
     return {
