@@ -498,12 +498,17 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
   const fetchTasks: Promise<MarketJob[]>[] = [
     // 1. Adzuna network queries
     ...queriesToRun.map((q) => fetchAdzunaJobs(q, searchLocation, remoteOnly)),
-    // 2. Targeted tier-1 queries on Adzuna (Google, Flipkart, Uber, Intel, Groww)
+    // 2. Targeted tier-1 queries on Adzuna (Google, Meta, Microsoft, Amazon, Flipkart, Uber, Intel, Groww, Swiggy, Zomato)
     fetchAdzunaJobs(`Google ${targetRole}`, searchLocation, remoteOnly),
+    fetchAdzunaJobs(`Meta ${targetRole}`, searchLocation, remoteOnly),
+    fetchAdzunaJobs(`Microsoft ${targetRole}`, searchLocation, remoteOnly),
+    fetchAdzunaJobs(`Amazon ${targetRole}`, searchLocation, remoteOnly),
     fetchAdzunaJobs(`Flipkart ${targetRole}`, searchLocation, remoteOnly),
     fetchAdzunaJobs(`Uber ${targetRole}`, searchLocation, remoteOnly),
     fetchAdzunaJobs(`Intel ${targetRole}`, searchLocation, remoteOnly),
     fetchAdzunaJobs(`Groww ${targetRole}`, searchLocation, remoteOnly),
+    fetchAdzunaJobs(`Swiggy ${targetRole}`, searchLocation, remoteOnly),
+    fetchAdzunaJobs(`Zomato ${targetRole}`, searchLocation, remoteOnly),
     // 3. Direct ATS feeds for top-funded AI startups & unicorns (Anthropic, Perplexity, Scale AI, Databricks, Stripe, CRED, etc.)
     fetchTopTierAtsJobs(targetRole),
     // 4. Remotive live global tech jobs
@@ -542,15 +547,21 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     raw = deduplicateJobs(fallbackJobs);
   }
 
-  // Step 3 — Pre-filter and balance across job boards
+  // Step 3 — Pre-filter and prioritize Top Tech & AI Startups
   let filtered = preFilter(raw, profile);
   // If preFilter dropped too many, use raw jobs so the user gets results
   if (filtered.length < 5 && raw.length > 0) {
     filtered = raw;
   }
 
-  // Interleave sources so every job board and top company has candidates evaluated by the LLM
-  let candidates = balanceSources(filtered, 25);
+  // Guarantee Top Tech & AI Startups are prioritized in candidate evaluation
+  const tierBadged = filtered.filter((j) => getTierBadge(j.company.display_name));
+  const generalMarket = filtered.filter((j) => !getTierBadge(j.company.display_name));
+
+  // Balance general market sources (Adzuna, Remotive, RemoteOK, Jobicy, Arbeitnow, LinkedIn/Indeed)
+  const balancedGeneral = balanceSources(generalMarket, 16);
+  // Tier-badged jobs first, followed by balanced general market jobs, up to 25 candidates
+  let candidates = deduplicateJobs([...tierBadged, ...balancedGeneral]).slice(0, 25);
 
   if (candidates.length === 0) {
     return {

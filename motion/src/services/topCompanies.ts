@@ -19,6 +19,11 @@ export const TOP_COMPANIES: TopCompanyConfig[] = [
   { name: "LangChain", type: "greenhouse", slug: "langchain", badge: "🤖 Top AI Startup" },
   { name: "Hugging Face", type: "greenhouse", slug: "huggingface", badge: "🤖 Top AI Startup" },
   { name: "ElevenLabs", type: "greenhouse", slug: "elevenlabs", badge: "🤖 Top AI Startup" },
+  { name: "Character.ai", type: "ashby", slug: "character", badge: "🤖 Top AI Startup" },
+  { name: "Harvey AI", type: "ashby", slug: "harvey", badge: "🤖 Top AI Startup" },
+  { name: "Synthesia", type: "ashby", slug: "synthesia", badge: "🤖 Top AI Startup" },
+  { name: "Pika Labs", type: "ashby", slug: "pika", badge: "🤖 Top AI Startup" },
+  { name: "Inflection AI", type: "greenhouse", slug: "inflectionai", badge: "🤖 Top AI Startup" },
 
   // --- Tier-1 Tech Giants & Elite Unicorns ---
   { name: "Databricks", type: "greenhouse", slug: "databricks", badge: "⭐ Tier-1 Tech" },
@@ -26,8 +31,18 @@ export const TOP_COMPANIES: TopCompanyConfig[] = [
   { name: "Figma", type: "greenhouse", slug: "figma", badge: "⭐ Tier-1 Tech" },
   { name: "Notion", type: "ashby", slug: "notion", badge: "⭐ Tier-1 Tech" },
   { name: "Linear", type: "ashby", slug: "linear", badge: "⭐ Tier-1 Tech" },
+  { name: "Vercel", type: "ashby", slug: "vercel", badge: "⭐ Tier-1 Tech" },
+  { name: "Supabase", type: "ashby", slug: "supabase", badge: "⭐ Tier-1 Tech" },
+  { name: "Replit", type: "ashby", slug: "replit", badge: "⭐ Tier-1 Tech" },
+  { name: "Docker", type: "ashby", slug: "docker", badge: "⭐ Tier-1 Tech" },
+  { name: "Ramp", type: "ashby", slug: "ramp", badge: "⭐ Tier-1 Tech" },
+  { name: "Coinbase", type: "greenhouse", slug: "coinbase", badge: "⭐ Tier-1 Tech" },
+  { name: "Brex", type: "greenhouse", slug: "brex", badge: "⭐ Tier-1 Tech" },
+  { name: "Airtable", type: "greenhouse", slug: "airtable", badge: "⭐ Tier-1 Tech" },
+  { name: "Affirm", type: "greenhouse", slug: "affirm", badge: "⭐ Tier-1 Tech" },
   { name: "CRED", type: "lever", slug: "cred", badge: "⭐ Tier-1 Tech" },
   { name: "Razorpay", type: "greenhouse", slug: "razorpaysoftwareprivatelimited", badge: "⭐ Tier-1 Tech" },
+  { name: "InMobi", type: "greenhouse", slug: "inmobi", badge: "⭐ Tier-1 Tech" },
 ];
 
 // Well-known tier-1 names that come via Adzuna or external feeds
@@ -47,6 +62,19 @@ export const TIER1_NAMES = [
   "razorpay",
   "figma",
   "notion",
+  "linear",
+  "vercel",
+  "supabase",
+  "replit",
+  "docker",
+  "ramp",
+  "coinbase",
+  "brex",
+  "airtable",
+  "affirm",
+  "inmobi",
+  "swiggy",
+  "zomato",
   "apple",
   "microsoft",
   "amazon",
@@ -55,7 +83,7 @@ export const TIER1_NAMES = [
 
 export function getTierBadge(companyName: string): string | undefined {
   const norm = companyName.toLowerCase();
-  if (/anthropic|perplexity|scale ai|together ai|cursor|anysphere|cohere|mistral|langchain|elevenlabs/i.test(norm)) {
+  if (/anthropic|perplexity|scale ai|together ai|cursor|anysphere|cohere|mistral|langchain|elevenlabs|harvey|synthesia|pika|character|inflection/i.test(norm)) {
     return "🤖 Top AI Startup";
   }
   if (TIER1_NAMES.some((t) => norm.includes(t))) {
