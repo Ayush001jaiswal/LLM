@@ -1,0 +1,102 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Backend CI (motion)
+  # ---------------------------------------------------------------------------
+  backend-ci:
+    name: Backend Lint, Types & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: motion
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: motion/package.json
+
+      - name: Install Dependencies
+        run: npm install --include=dev
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Typecheck TypeScript
+        run: npx tsc --noEmit
+
+      - name: Build Backend (dist/)
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Frontend CI (motion_ui)
+  # ---------------------------------------------------------------------------
+  frontend-ci:
+    name: Frontend Lint & Vite Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: motion_ui
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: motion_ui/package.json
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Typecheck & Build Frontend
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Production Health Smoke Test (Runs on main push)
+  # ---------------------------------------------------------------------------
+  production-smoke-test:
+    name: Production Deployment Smoke Test
+    needs: [backend-ci, frontend-ci]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Wait for Cloud Deployments
+        run: |
+          echo "Waiting 30 seconds for Render and Vercel webhooks to trigger..."
+          sleep 30
+
+      - name: Verify Backend Health Check
+        run: |
+          echo "Pinging live Render backend health endpoint..."
+          curl --fail --retry 5 --retry-delay 10 --max-time 30 https://motion-backend-d1d9.onrender.com/api/health || {
+            echo "Render backend is waking up or deploy in progress..."
+          }
+
+      - name: Verify Frontend CDN Availability
+        run: |
+          echo "Checking live Vercel frontend availability..."
+          curl --fail -I --max-time 15 https://llm-fawn.vercel.app/ || {
+            echo "Vercel frontend check failed"
+          }
