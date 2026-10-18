@@ -43,8 +43,23 @@ function JobCard({ job }: { job: JobMatch }) {
   return (
     <div className="jm-card">
       <div className="jm-card-header">
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           <ScoreBadge score={job.score} />
+          {job.tierBadge && (
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "2px 8px",
+                borderRadius: "12px",
+                background: job.tierBadge.includes("AI") ? "rgba(217, 70, 239, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                color: job.tierBadge.includes("AI") ? "#e879f9" : "#fbbf24",
+                border: job.tierBadge.includes("AI") ? "1px solid rgba(217, 70, 239, 0.35)" : "1px solid rgba(245, 158, 11, 0.35)",
+                fontWeight: 600,
+              }}
+            >
+              {job.tierBadge}
+            </span>
+          )}
           {job.source && (
             <span
               style={{
@@ -102,6 +117,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [location, setLocation] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(false);
+  const [filterTopOnly, setFilterTopOnly] = useState(false);
 
   const ready = resumeStatus === "reviewed" || resumeStatus === "ready";
 
@@ -194,10 +210,65 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
             <p className="jm-empty">No strong matches found. Try a different location or check back later.</p>
           ) : (
             <>
-              <p className="jm-count">{result.jobs.length} jobs ranked for your profile</p>
-              <div className="jm-cards">
-                {result.jobs.map((job) => <JobCard key={job.url} job={job} />)}
-              </div>
+              {(() => {
+                const topCount = result.jobs.filter((j) => Boolean(j.tierBadge)).length;
+                const displayedJobs = filterTopOnly
+                  ? result.jobs.filter((j) => Boolean(j.tierBadge))
+                  : result.jobs;
+
+                return (
+                  <>
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center", margin: "14px 0" }}>
+                      <button
+                        type="button"
+                        onClick={() => setFilterTopOnly(false)}
+                        style={{
+                          background: !filterTopOnly ? "#2563eb" : "transparent",
+                          color: !filterTopOnly ? "#fff" : "var(--text)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "8px",
+                          padding: "6px 14px",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        All Market Jobs ({result.jobs.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterTopOnly(true)}
+                        style={{
+                          background: filterTopOnly ? "linear-gradient(135deg, #d946ef, #8b5cf6)" : "transparent",
+                          color: filterTopOnly ? "#fff" : "#fbbf24",
+                          border: filterTopOnly ? "none" : "1px solid rgba(245, 158, 11, 0.4)",
+                          borderRadius: "8px",
+                          padding: "6px 14px",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        ⭐ Top Tech &amp; AI Startups ({topCount})
+                      </button>
+                    </div>
+
+                    <p className="jm-count">
+                      {displayedJobs.length} {filterTopOnly ? "Top Tech & AI Startup" : ""} jobs ranked for your profile
+                    </p>
+
+                    {displayedJobs.length === 0 ? (
+                      <p className="jm-empty">
+                        No direct Top Tech openings matched this specific search. Click "All Market Jobs" to view full market listings.
+                      </p>
+                    ) : (
+                      <div className="jm-cards">
+                        {displayedJobs.map((job) => <JobCard key={job.url} job={job} />)}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </>
           )}
         </>

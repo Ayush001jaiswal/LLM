@@ -12,6 +12,7 @@
 
 import { generateJson } from "./ai.js";
 import type { ResumeData } from "./resume/types.js";
+import { fetchTopTierAtsJobs, getTierBadge } from "./topCompanies.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +40,7 @@ export interface JobMatch {
   fitReason: string;
   gaps: string[];
   source?: string;
+  tierBadge?: string;
 }
 
 interface InferredProfile {
@@ -496,16 +498,24 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
   const fetchTasks: Promise<MarketJob[]>[] = [
     // 1. Adzuna network queries
     ...queriesToRun.map((q) => fetchAdzunaJobs(q, searchLocation, remoteOnly)),
-    // 2. Remotive live global tech jobs
+    // 2. Targeted tier-1 queries on Adzuna (Google, Flipkart, Uber, Intel, Groww)
+    fetchAdzunaJobs(`Google ${targetRole}`, searchLocation, remoteOnly),
+    fetchAdzunaJobs(`Flipkart ${targetRole}`, searchLocation, remoteOnly),
+    fetchAdzunaJobs(`Uber ${targetRole}`, searchLocation, remoteOnly),
+    fetchAdzunaJobs(`Intel ${targetRole}`, searchLocation, remoteOnly),
+    fetchAdzunaJobs(`Groww ${targetRole}`, searchLocation, remoteOnly),
+    // 3. Direct ATS feeds for top-funded AI startups & unicorns (Anthropic, Perplexity, Scale AI, Databricks, Stripe, CRED, etc.)
+    fetchTopTierAtsJobs(targetRole),
+    // 4. Remotive live global tech jobs
     fetchRemotiveJobs(targetRole),
     ...(topSkill ? [fetchRemotiveJobs(`${targetRole} ${topSkill}`)] : []),
-    // 3. RemoteOK live engineering board
+    // 5. RemoteOK live engineering board
     fetchRemoteOKJobs(targetRole),
-    // 4. Jobicy live engineering opportunities
+    // 6. Jobicy live engineering opportunities
     fetchJobicyJobs(targetRole),
-    // 5. Arbeitnow tech board
+    // 7. Arbeitnow tech board
     fetchArbeitnowJobs(targetRole),
-    // 6. LinkedIn & Indeed (via JSearch / RapidAPI if configured)
+    // 8. LinkedIn & Indeed (via JSearch / RapidAPI if configured)
     fetchJSearchJobs(targetRole, searchLocation),
   ];
 
@@ -519,6 +529,7 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
   // Fallback: if specific queries returned 0 results, do a broad multi-board fallback
   if (raw.length === 0) {
     const fallbackSettled = await Promise.allSettled([
+      fetchTopTierAtsJobs("engineer"),
       fetchAdzunaJobs(targetRole || "developer", searchLocation, remoteOnly),
       fetchRemotiveJobs("software developer"),
       fetchRemoteOKJobs("developer"),
@@ -538,7 +549,7 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     filtered = raw;
   }
 
-  // Interleave sources so every job board has candidates evaluated by the LLM
+  // Interleave sources so every job board and top company has candidates evaluated by the LLM
   let candidates = balanceSources(filtered, 25);
 
   if (candidates.length === 0) {
@@ -572,10 +583,17 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     })
   );
 
-  // Step 5 — Build final ranked list
+  // Step 5 — Build final ranked list with priority boost for Top Tech & AI Startups
   const scored = evaluations
     .filter((e): e is NonNullable<typeof e> => e !== null)
-    .sort((a, b) => b.evaluation.score - a.evaluation.score)
+    .sort((a, b) => {
+      const aBadge = getTierBadge(a.job.company.display_name);
+      const bBadge = getTierBadge(b.job.company.display_name);
+      // Give top tech companies & AI startups priority in sorting
+      const aScore = a.evaluation.score + (aBadge ? 2 : 0);
+      const bScore = b.evaluation.score + (bBadge ? 2 : 0);
+      return bScore - aScore;
+    })
     .slice(0, limit);
 
   const jobs: JobMatch[] = scored.map(({ job, evaluation }, idx) => ({
@@ -592,6 +610,7 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     fitReason:     evaluation.reason,
     gaps:          evaluation.gaps,
     source:        job.source || "Market",
+    tierBadge:     getTierBadge(job.company.display_name),
   }));
 
   return { jobs, profile, warnings };

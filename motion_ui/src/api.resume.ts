@@ -124,6 +124,7 @@ export interface JobMatch {
   fitReason: string;
   gaps: string[];
   source?: string;
+  tierBadge?: string;
 }
 
 export interface InferredProfile {
