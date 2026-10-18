@@ -1,6 +1,9 @@
 {
   "mcpServers": {
-    "motion": {
+    "motion-cloud": {
+      "url": "https://motion-backend-d1d9.onrender.com/sse"
+    },
+    "motion-local": {
       "command": "node",
       "args": [
         "c:/Users/91932/Documents/LLM/motion/node_modules/tsx/dist/cli.mjs",
