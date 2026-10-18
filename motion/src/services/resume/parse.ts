@@ -37,25 +37,85 @@ export type SectionKey =
   | "other";
 
 const ALIASES: Record<SectionKey, string[]> = {
-  summary: ["summary", "professional summary", "career summary", "profile", "professional profile", "objective", "career objective", "about me", "about", "executive summary"],
-  experience: ["experience", "work experience", "professional experience", "employment", "employment history", "work history", "career history", "internships", "internship experience", "relevant experience"],
-  education: ["education", "academic background", "academics", "academic qualifications", "qualifications", "educational qualifications", "education and training"],
-  skills: ["skills", "technical skills", "key skills", "core competencies", "core skills", "skills and tools", "technical proficiency", "technologies", "tools and technologies", "areas of expertise"],
-  projects: ["projects", "academic projects", "personal projects", "key projects", "selected projects", "project experience"],
-  certifications: ["certifications", "certificates", "licenses and certifications", "certifications and courses", "courses", "training"],
-  achievements: ["achievements", "awards", "honors", "honours", "awards and achievements", "accomplishments", "honors and awards"],
-  other: ["volunteering", "volunteer experience", "volunteer work", "publications", "languages", "language skills", "leadership", "leadership experience", "activities", "extracurricular activities", "co curricular activities", "patents", "research", "research experience", "community service", "positions of responsibility", "additional information"],
-  ignore: ["declaration", "personal details", "personal information", "personal profile", "references", "hobbies", "interests", "hobbies and interests", "extra curricular activities"],
+  summary: ["summary", "professional summary", "career summary", "profile", "professional profile", "objective", "career objective", "about me", "about", "executive summary", "personal summary", "summary of qualifications"],
+  experience: ["experience", "work experience", "professional experience", "employment", "employment history", "work history", "career history", "internships", "internship experience", "relevant experience", "industry experience", "practical experience"],
+  education: ["education", "academic background", "academics", "academic qualifications", "qualifications", "educational qualifications", "education and training", "academic history", "academic credentials"],
+  skills: ["skills", "technical skills", "key skills", "core competencies", "core skills", "skills and tools", "technical proficiency", "technologies", "tools and technologies", "areas of expertise", "technical expertise", "technical competencies", "skills and abilities"],
+  projects: ["projects", "academic projects", "personal projects", "key projects", "selected projects", "project experience", "notable projects", "technical projects"],
+  certifications: ["certifications", "certificates", "licenses and certifications", "certifications and licenses", "certifications and courses", "courses and certifications", "courses", "training", "professional certifications"],
+  achievements: ["achievements", "awards", "honors", "honours", "awards and achievements", "accomplishments", "honors and awards", "achievements and extra curriculars", "achievements and extracurriculars", "achievements and activities", "awards and recognition"],
+  other: ["volunteering", "volunteer experience", "volunteer work", "publications", "languages", "language skills", "leadership", "leadership experience", "activities", "extracurricular activities", "extra curricular activities", "co curricular activities", "patents", "research", "research experience", "community service", "positions of responsibility", "additional information"],
+  ignore: ["declaration", "personal details", "personal information", "personal profile", "references", "hobbies", "interests", "hobbies and interests"],
 };
 
 const IGNORE_LABEL = "Declaration / personal details / references / hobbies";
 
-function headingKey(line: string): SectionKey | null {
-  const clean = line.toLowerCase().replace(/[^a-z& ]/g, " ").replace(/&/g, "and").replace(/\s+/g, " ").trim();
-  if (!clean || clean.split(" ").length > 5) return null;
+interface HeadingMatch {
+  key: SectionKey;
+  remainder?: string;
+}
+
+function findKey(phrase: string): SectionKey | null {
+  const clean = phrase
+    .toLowerCase()
+    .replace(/[^a-z& ]/g, " ")
+    .replace(/&/g, "and")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!clean || clean.split(" ").length > 6) return null;
+
   for (const [key, list] of Object.entries(ALIASES)) {
     if (list.includes(clean)) return key as SectionKey;
   }
+
+  // Compound heading check (e.g. "Achievements & Extra-curriculars", "Skills & Abilities")
+  if (clean.includes(" and ")) {
+    const parts = clean.split(" and ").map((p) => p.trim());
+    for (const part of parts) {
+      for (const [key, list] of Object.entries(ALIASES)) {
+        if (list.includes(part)) return key as SectionKey;
+      }
+    }
+  }
+
+  return null;
+}
+
+export function headingKey(line: string): SectionKey | null {
+  const match = matchHeading(line);
+  return match?.key ?? null;
+}
+
+export function matchHeading(rawLine: string): HeadingMatch | null {
+  const line = rawLine.trim();
+  if (!line) return null;
+
+  // Don't treat bullet points as section headings
+  if (/^[•·●■◆▪*]\s+/.test(line)) return null;
+
+  // Strip leading numbering like "1. ", "I. ", "1) "
+  const stripped = line.replace(/^([0-9]+|[ivxlcdm]+)[\.\)]\s+/i, "").trim();
+
+  // Delimiters between heading and inline content:
+  // Colons, pipes, em-dashes (e.g. "Experience: Senior Dev", "Skills | React")
+  // Or hyphens/en-dashes surrounded by whitespace (e.g. "Experience - Full Stack Developer")
+  // We avoid matching hyphenated words like "Extra-curriculars" or "Full-stack".
+  const delimMatch = stripped.match(/^([^:\-–—|]{2,40})(?:\s*[:|—]\s*|\s+[-–]\s+)(.*)$/);
+  if (delimMatch) {
+    const candidatePrefix = delimMatch[1].trim();
+    const remainder = delimMatch[2].trim();
+    const key = findKey(candidatePrefix);
+    if (key) {
+      return { key, remainder: remainder || undefined };
+    }
+  }
+
+  const directKey = findKey(stripped);
+  if (directKey) {
+    return { key: directKey };
+  }
+
   return null;
 }
 
@@ -77,11 +137,15 @@ export function splitSections(text: string): Sections {
 
   let current: SectionKey | null = null;
   for (const line of lines) {
-    const key = headingKey(line);
-    if (key) {
-      current = key;
-      if (key === "ignore") out.ignoredPresent = true;
-      if (key === "other") out.other.push(line); // keep the heading text for context
+    const match = matchHeading(line);
+    if (match) {
+      current = match.key;
+      if (match.key === "ignore") out.ignoredPresent = true;
+      if (match.key === "other") out.other.push(line); // keep the heading text for context
+      if (match.remainder) {
+        if (current === "other") out.other.push(match.remainder);
+        else if (current !== "ignore") out.parts[current].push(match.remainder);
+      }
       continue;
     }
     if (current === null) out.header.push(line);
