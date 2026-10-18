@@ -26,9 +26,10 @@ export async function testGmailCredentials(
   const pass = cleanAppPassword(rawPassword);
   try {
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
+      service: "gmail",
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       auth: {
         user: email.trim(),
         pass,
@@ -62,9 +63,10 @@ export async function sendGmail(
   const pass = cleanAppPassword(rawPassword);
   try {
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
+      service: "gmail",
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       auth: {
         user: email.trim(),
         pass,
