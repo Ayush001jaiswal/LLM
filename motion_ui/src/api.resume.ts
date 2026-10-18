@@ -123,6 +123,7 @@ export interface JobMatch {
   matchedSkills: string[];
   fitReason: string;
   gaps: string[];
+  source?: string;
 }
 
 export interface InferredProfile {

@@ -38,6 +38,7 @@ export interface JobMatch {
   matchedSkills: string[];
   fitReason: string;
   gaps: string[];
+  source?: string;
 }
 
 interface InferredProfile {
@@ -51,7 +52,7 @@ interface InferredProfile {
   allSkills: string[];
 }
 
-interface AdzunaJob {
+export interface MarketJob {
   id: string;
   title: string;
   company: { display_name: string };
@@ -61,6 +62,7 @@ interface AdzunaJob {
   created: string;
   redirect_url: string;
   description: string;
+  source: string;
 }
 
 interface JobEvaluation {
@@ -129,23 +131,20 @@ hardExclusions: job title keywords that would be a clear mismatch (e.g. "data en
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — Fetch jobs from Adzuna
+// Step 2 — Fetch jobs from Multi-Board Market Aggregators
+// (Adzuna, Remotive, Jobicy, Arbeitnow, and JSearch / RapidAPI)
 // ---------------------------------------------------------------------------
 const ADZUNA_APP_ID  = process.env.ADZUNA_APP_ID  ?? "";
 const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY ?? "";
 const ADZUNA_COUNTRY = process.env.ADZUNA_COUNTRY ?? "in"; // "in" = India
 
-async function fetchAdzunaJobs(query: string, where: string, remoteOnly: boolean): Promise<AdzunaJob[]> {
+async function fetchAdzunaJobs(query: string, where: string, remoteOnly: boolean): Promise<MarketJob[]> {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
   const country = process.env.ADZUNA_COUNTRY || "in";
 
-  if (!appId || !appKey) {
-    console.warn("[jobSearch] Adzuna credentials not set — returning empty results");
-    return [];
-  }
+  if (!appId || !appKey) return [];
 
-  // Handle remote jobs correctly for Adzuna
   let what = query.trim();
   let searchWhere = where.trim();
 
@@ -168,15 +167,128 @@ async function fetchAdzunaJobs(query: string, where: string, remoteOnly: boolean
   const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params}`;
 
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) {
-      console.warn(`[jobSearch] Adzuna returned status ${res.status} for query "${what}"`);
-      return [];
-    }
-    const data = (await res.json()) as { results?: AdzunaJob[] };
-    return data.results ?? [];
-  } catch (err) {
-    console.error("[jobSearch] Adzuna fetch error", err);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { results?: any[] };
+    return (data.results ?? []).map((j) => ({
+      id: `adzuna_${j.id}`,
+      title: j.title || "Job Opportunity",
+      company: { display_name: j.company?.display_name || "Company" },
+      location: { display_name: j.location?.display_name || searchWhere },
+      salary_min: j.salary_min,
+      salary_max: j.salary_max,
+      created: j.created || new Date().toISOString(),
+      redirect_url: j.redirect_url,
+      description: (j.description || "").slice(0, 1000),
+      source: "Adzuna",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchRemotiveJobs(query: string): Promise<MarketJob[]> {
+  const clean = query.replace(/[^\w\s]/g, " ").trim();
+  const url = `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(clean)}&limit=25`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { jobs?: any[] };
+    return (data.jobs ?? []).map((j) => ({
+      id: `remotive_${j.id}`,
+      title: j.title,
+      company: { display_name: j.company_name || "Tech Company" },
+      location: { display_name: j.candidate_required_location || "Remote" },
+      created: j.publication_date || new Date().toISOString(),
+      redirect_url: j.url,
+      description: (j.description || "").replace(/<[^>]+>/g, " ").slice(0, 1000),
+      source: "Remotive",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchJobicyJobs(query: string): Promise<MarketJob[]> {
+  const tag = /dev|engineer|frontend|backend|fullstack|data|ai|cloud/i.test(query)
+    ? "developer"
+    : encodeURIComponent(query.split(" ")[0]);
+  const url = `https://jobicy.com/api/v2/remote-jobs?count=25&tag=${tag}`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { jobs?: any[] };
+    return (data.jobs ?? []).map((j) => ({
+      id: `jobicy_${j.id}`,
+      title: j.jobTitle,
+      company: { display_name: j.companyName || "Company" },
+      location: { display_name: j.jobGeo || "Remote / Global" },
+      salary_min: j.annualSalaryMin ? Number(j.annualSalaryMin) : undefined,
+      salary_max: j.annualSalaryMax ? Number(j.annualSalaryMax) : undefined,
+      created: j.pubDate || new Date().toISOString(),
+      redirect_url: j.url,
+      description: (j.jobDescription || "").replace(/<[^>]+>/g, " ").slice(0, 1000),
+      source: "Jobicy",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchArbeitnowJobs(query: string): Promise<MarketJob[]> {
+  const url = `https://www.arbeitnow.com/api/job-board-api`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: any[] };
+    const keywords = query.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    const matches = (data.data ?? []).filter((j) => {
+      const fullText = `${j.title} ${j.tags?.join(" ") || ""} ${j.description}`.toLowerCase();
+      return keywords.some((k) => fullText.includes(k));
+    });
+    return matches.slice(0, 20).map((j) => ({
+      id: `arbeitnow_${j.slug}`,
+      title: j.title,
+      company: { display_name: j.company_name || "Company" },
+      location: { display_name: j.location || (j.remote ? "Remote" : "Worldwide") },
+      created: j.created_at ? new Date(j.created_at * 1000).toISOString() : new Date().toISOString(),
+      redirect_url: j.url,
+      description: (j.description || "").replace(/<[^>]+>/g, " ").slice(0, 1000),
+      source: "Arbeitnow",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchJSearchJobs(query: string, location: string): Promise<MarketJob[]> {
+  const apiKey = process.env.RAPIDAPI_KEY || process.env.JSEARCH_KEY;
+  if (!apiKey) return [];
+
+  const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(`${query} in ${location}`)}&page=1&num_pages=1`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "x-rapidapi-key": apiKey,
+        "x-rapidapi-host": "jsearch.p.rapidapi.com",
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: any[] };
+    return (data.data ?? []).map((j) => ({
+      id: `jsearch_${j.job_id}`,
+      title: j.job_title,
+      company: { display_name: j.employer_name || "Company" },
+      location: { display_name: [j.job_city, j.job_country].filter(Boolean).join(", ") || location },
+      salary_min: j.job_min_salary,
+      salary_max: j.job_max_salary,
+      created: j.job_posted_at_datetime_utc || new Date().toISOString(),
+      redirect_url: j.job_apply_link || j.job_google_link,
+      description: (j.job_description || "").slice(0, 1000),
+      source: "LinkedIn / Indeed",
+    }));
+  } catch {
     return [];
   }
 }
@@ -184,7 +296,7 @@ async function fetchAdzunaJobs(query: string, where: string, remoteOnly: boolean
 // ---------------------------------------------------------------------------
 // Step 3 — Pre-filter
 // ---------------------------------------------------------------------------
-function preFilter(jobs: AdzunaJob[], profile: InferredProfile): AdzunaJob[] {
+function preFilter(jobs: MarketJob[], profile: InferredProfile): MarketJob[] {
   const exclusions = profile.hardExclusions.map((e) => e.toLowerCase().trim()).filter(Boolean);
 
   // Relax window to 60 days so candidates don't get 0 results on fresh aggregations
@@ -203,7 +315,7 @@ function preFilter(jobs: AdzunaJob[], profile: InferredProfile): AdzunaJob[] {
   });
 }
 
-function deduplicateJobs(jobs: AdzunaJob[]): AdzunaJob[] {
+function deduplicateJobs(jobs: MarketJob[]): MarketJob[] {
   const seen = new Set<string>();
   return jobs.filter((j) => {
     // Deduplicate by URL, then by normalized title+company
@@ -228,7 +340,7 @@ const JOB_EVAL_SCHEMA = {
   required: ["score", "reason", "strengths", "gaps"],
 };
 
-async function evaluateJob(job: AdzunaJob, profile: InferredProfile): Promise<JobEvaluation> {
+async function evaluateJob(job: MarketJob, profile: InferredProfile): Promise<JobEvaluation> {
   const profileSummary =
     `Role: ${profile.careerTrajectory}. Seniority: ${profile.seniorityBand}. ` +
     `Domains: ${profile.inferredDomains.join(", ")}. ` +
@@ -281,12 +393,12 @@ gaps: 1–2 short phrases (the most notable mismatches, or empty if none).`;
 // ---------------------------------------------------------------------------
 // Skill matching helper (cheap, no LLM)
 // ---------------------------------------------------------------------------
-function findMatchedSkills(job: AdzunaJob, profile: InferredProfile): string[] {
+function findMatchedSkills(job: MarketJob, profile: InferredProfile): string[] {
   const jobText = `${job.title} ${job.description}`.toLowerCase();
   return profile.allSkills.filter((skill) => jobText.includes(skill.toLowerCase())).slice(0, 6);
 }
 
-function formatSalary(job: AdzunaJob): string | null {
+function formatSalary(job: MarketJob): string | null {
   if (!job.salary_min && !job.salary_max) return null;
   const fmt = (n: number) =>
     n >= 100_000 ? `${(n / 100_000).toFixed(1)}L` : `${Math.round(n / 1000)}k`;
@@ -320,37 +432,54 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     profile.searchQueries[1] ?? "",
   ])).filter(Boolean).slice(0, 4);
 
-  // Step 2 — Fetch jobs in parallel
-  const allResults = await Promise.all(
-    queriesToRun.map((q) => fetchAdzunaJobs(q, searchLocation, remoteOnly))
-  );
+  // Step 2 — Fetch jobs across multiple market boards concurrently
+  const fetchTasks: Promise<MarketJob[]>[] = [
+    // 1. Adzuna network queries
+    ...queriesToRun.map((q) => fetchAdzunaJobs(q, searchLocation, remoteOnly)),
+    // 2. Remotive live global tech jobs
+    fetchRemotiveJobs(targetRole),
+    ...(topSkill ? [fetchRemotiveJobs(`${targetRole} ${topSkill}`)] : []),
+    // 3. Jobicy live engineering opportunities
+    fetchJobicyJobs(targetRole),
+    // 4. Arbeitnow tech board
+    fetchArbeitnowJobs(targetRole),
+    // 5. LinkedIn & Indeed (via JSearch / RapidAPI if configured)
+    fetchJSearchJobs(targetRole, searchLocation),
+  ];
 
-  let raw = deduplicateJobs(allResults.flat());
+  const settled = await Promise.allSettled(fetchTasks);
+  const fetchedJobs: MarketJob[] = settled
+    .filter((r): r is PromiseFulfilledResult<MarketJob[]> => r.status === "fulfilled")
+    .flatMap((r) => r.value);
 
-  // Fallback: if specific queries returned 0 results, do a broad role search
+  let raw = deduplicateJobs(fetchedJobs);
+
+  // Fallback: if specific queries returned 0 results, do a broad multi-board fallback
   if (raw.length === 0) {
-    const fallback = await fetchAdzunaJobs(targetRole || "developer", searchLocation, remoteOnly);
-    raw = deduplicateJobs(fallback);
-  }
-
-  const appId = process.env.ADZUNA_APP_ID;
-  const appKey = process.env.ADZUNA_APP_KEY;
-  if (!appId || !appKey) {
-    warnings.push("Adzuna API credentials are not configured. Set ADZUNA_APP_ID and ADZUNA_APP_KEY in .env to fetch real jobs.");
+    const fallbackSettled = await Promise.allSettled([
+      fetchAdzunaJobs(targetRole || "developer", searchLocation, remoteOnly),
+      fetchRemotiveJobs("software developer"),
+      fetchJobicyJobs("developer"),
+      fetchArbeitnowJobs("developer"),
+    ]);
+    const fallbackJobs = fallbackSettled
+      .filter((r): r is PromiseFulfilledResult<MarketJob[]> => r.status === "fulfilled")
+      .flatMap((r) => r.value);
+    raw = deduplicateJobs(fallbackJobs);
   }
 
   // Step 3 — Pre-filter
-  let candidates = preFilter(raw, profile).slice(0, 25);
+  let candidates = preFilter(raw, profile).slice(0, 30);
   // If preFilter dropped too many, use raw jobs so the user gets results
   if (candidates.length < 5 && raw.length > 0) {
-    candidates = raw.slice(0, 25);
+    candidates = raw.slice(0, 30);
   }
 
   if (candidates.length === 0) {
     return {
       jobs: [],
       profile,
-      warnings: [...warnings, "No jobs currently found for this specific search. Try a broader role or unchecking 'Remote only'."],
+      warnings: [...warnings, "No active job listings found for this specific query across market boards. Try broadening the role or location."],
     };
   }
 
@@ -396,6 +525,7 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     matchedSkills: findMatchedSkills(job, profile),
     fitReason:     evaluation.reason,
     gaps:          evaluation.gaps,
+    source:        job.source || "Market",
   }));
 
   return { jobs, profile, warnings };

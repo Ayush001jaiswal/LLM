@@ -43,7 +43,24 @@ function JobCard({ job }: { job: JobMatch }) {
   return (
     <div className="jm-card">
       <div className="jm-card-header">
-        <ScoreBadge score={job.score} />
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <ScoreBadge score={job.score} />
+          {job.source && (
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "2px 8px",
+                borderRadius: "12px",
+                background: "rgba(96, 165, 250, 0.12)",
+                color: "#60a5fa",
+                border: "1px solid rgba(96, 165, 250, 0.3)",
+                fontWeight: 500,
+              }}
+            >
+              🌐 {job.source}
+            </span>
+          )}
+        </div>
         <span className="jm-posted">{timeSince(job.postedAt)}</span>
       </div>
 

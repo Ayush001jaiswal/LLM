@@ -168,7 +168,7 @@ export function createMcpServer(): McpServer {
   // ---------------------------------------------------------------------------
   server.tool(
     "find_matching_jobs",
-    "Searches and ranks live actively-hiring job listings matching a candidate's resume and target role using Adzuna and Gemini AI evaluation.",
+    "Searches and ranks live actively-hiring job listings matching a candidate's resume and target role across market boards (Adzuna, Remotive, Jobicy, Arbeitnow, LinkedIn/Indeed) and Gemini AI evaluation.",
     {
       filePath: z.string().optional().describe("Optional path to a local resume file (.pdf or .docx)"),
       resumeId: z.number().optional().describe("Optional ID of a saved resume in the Motion database"),
@@ -238,7 +238,7 @@ export function createMcpServer(): McpServer {
 
         results.jobs.forEach((job) => {
           lines.push(`------------------------------------------------------`);
-          lines.push(`[#${job.rank}] ${job.title} @ ${job.company}`);
+          lines.push(`[#${job.rank}] ${job.title} @ ${job.company} [${job.source || "Market"}]`);
           lines.push(`Location: ${job.location} | Salary: ${job.salary || "Not disclosed"}`);
           lines.push(`Match Score: ${Math.round((job.score / 10) * 100)}% (${job.score}/10)`);
           lines.push(`Recruiter Fit Reason: "${job.fitReason}"`);
