@@ -639,7 +639,7 @@ function Chat({ email, onLogout, theme, onToggleTheme, onOpenResume, onOpenInteg
           + New chat
         </button>
         <button className="new-chat" onClick={onOpenResume}>
-          📄 Resume optimizer
+          📄 Resume Suite & Templates
         </button>
         <button className="new-chat" onClick={onOpenIntegrations}>
           ⚡ MCP Integrations

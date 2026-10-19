@@ -1,4 +1,5 @@
 export type ResumeFormat = "pdf" | "docx";
+export type ResumeTemplateId = "classic" | "modern_tech" | "executive" | "compact" | "creative";
 
 export interface Contact {
   name: string;

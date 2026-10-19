@@ -7,14 +7,15 @@ import { auditDocxLayout } from "./layout.js";
 import { parseResume } from "./parse.js";
 import { buildIgnoreSet, findMisspellings } from "./spell.js";
 import { findBuzzwords, flattenResume } from "./style.js";
-import type { AnalysisResult, AtsCheck, Progress, ResumeData, ResumeFormat, ReviewResult } from "./types.js";
+import type { AnalysisResult, AtsCheck, Progress, ResumeData, ResumeFormat, ResumeTemplateId, ReviewResult } from "./types.js";
 
 export async function renderResume(
   data: ResumeData,
-  format: ResumeFormat
+  format: ResumeFormat,
+  templateId: ResumeTemplateId = "modern_tech"
 ): Promise<{ buffer: Buffer; droppedCharacters: number }> {
-  if (format === "docx") return { buffer: await buildDocx(data), droppedCharacters: 0 };
-  return buildPdf(data);
+  if (format === "docx") return { buffer: await buildDocx(data, templateId), droppedCharacters: 0 };
+  return buildPdf(data, templateId);
 }
 
 // Looks up the resume handbook (RAG). Never throws: the app still works without it.

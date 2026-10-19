@@ -5,7 +5,12 @@ import { uploadLimiter } from "../middleware/rateLimits.js";
 import { detectFormat } from "../services/resume/extractText.js";
 import { enqueueImproveJob, enqueueReviewJob } from "../services/resume/jobs.js";
 import { renderResume } from "../services/resume/pipeline.js";
-import type { ResumeData, ResumeFormat } from "../services/resume/types.js";
+import { TEMPLATES } from "../services/resume/build.js";
+import { runAtsChecks, extractKeywords } from "../services/resume/ats.js";
+import { buildIgnoreSet } from "../services/resume/spell.js";
+import { flattenResume } from "../services/resume/style.js";
+import { generateJson } from "../services/ai.js";
+import type { AtsReport, ResumeData, ResumeFormat, ResumeTemplateId } from "../services/resume/types.js";
 
 const router = Router();
 
@@ -24,6 +29,201 @@ const parseId = (v: string | string[] | undefined): number | null => {
   const n = Number(Array.isArray(v) ? v[0] : v);
   return Number.isInteger(n) && n > 0 ? n : null;
 };
+
+function evaluateResumeData(data: ResumeData, jobDescription?: string): AtsReport {
+  const flatText = flattenResume(data);
+  const keywords = jobDescription ? extractKeywords(jobDescription) : [];
+  const ignore = buildIgnoreSet(data, []);
+  return runAtsChecks({
+    data,
+    roundTripText: flatText,
+    originalText: flatText,
+    pages: 1,
+    keywords,
+    ignoreWords: ignore,
+    isReview: false,
+  });
+}
+
+// GET /api/resumes/templates: list all industry standard templates
+router.get("/templates", (_req, res) => {
+  res.json(Object.values(TEMPLATES));
+});
+
+// POST /api/resumes/render: on-the-fly render of arbitrary resume data with chosen template
+router.post("/render", async (req, res) => {
+  const { data, format = "pdf", templateId = "modern_tech" } = req.body || {};
+  if (!data || typeof data !== "object") {
+    return res.status(400).json({ error: "Missing resume data" });
+  }
+
+  const requestedFormat: ResumeFormat = format === "docx" ? "docx" : "pdf";
+  const requestedTemplate: ResumeTemplateId = TEMPLATES[templateId as ResumeTemplateId]
+    ? (templateId as ResumeTemplateId)
+    : "modern_tech";
+
+  const { buffer } = await renderResume(data as ResumeData, requestedFormat, requestedTemplate);
+  const base = (data.contact?.name || "Resume").replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 50) || "Resume";
+
+  res.setHeader("Content-Type", MIME[requestedFormat]);
+  res.setHeader("Content-Disposition", `attachment; filename="${base}_${requestedTemplate}.${requestedFormat}"`);
+  res.send(buffer);
+});
+
+// POST /api/resumes/ai/bullet: enhance a bullet point into Google XYZ / STAR format
+router.post("/ai/bullet", async (req, res) => {
+  const { bullet, targetRole = "Software Engineer", context = "" } = req.body || {};
+  if (!bullet || typeof bullet !== "string") {
+    return res.status(400).json({ error: "Missing bullet text" });
+  }
+
+  try {
+    const prompt = `You are a Principal Technical Recruiter and Career Strategist at top Silicon Valley firms (Google, Meta, Apple).
+Rewrite this raw draft bullet point into the proven Google XYZ impact formula: "Accomplished [X] as measured by [Y] by doing [Z]".
+Guidelines:
+- Start with a powerful, specific action verb (e.g. Engineered, Architected, Accelerated, Reduced, Spearheaded).
+- Include realistic scale, latency, throughput, or business metrics that match the role and context.
+- Keep it concise (1-2 sentences max, under 30 words).
+- Avoid generic buzzwords and fluff.
+- Tailored for role: "${targetRole}".`;
+
+    const schema = {
+      type: "object",
+      properties: {
+        enhanced: { type: "string" },
+        actionVerb: { type: "string" },
+        metricHighlight: { type: "string" },
+        explanation: { type: "string" },
+      },
+      required: ["enhanced", "actionVerb", "explanation"],
+    };
+
+    const result = await generateJson<{
+      enhanced: string;
+      actionVerb: string;
+      metricHighlight?: string;
+      explanation: string;
+    }>(
+      prompt,
+      `Draft Bullet: "${bullet}"\nContext: "${context}"`,
+      schema,
+      { tier: "smart" }
+    );
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to enhance bullet: " + (err as Error).message });
+  }
+});
+
+// POST /api/resumes/ai/summary: generate high-impact executive summary
+router.post("/ai/summary", async (req, res) => {
+  const { targetRole = "Software Engineer", experience = [], skills = [] } = req.body || {};
+
+  try {
+    const prompt = `You are an elite executive resume coach. Write an impactful, professional 2-3 sentence resume summary for a candidate targeting the role of "${targetRole}".
+- Sentence 1: Professional identity, core specializations, and primary domains.
+- Sentence 2: Major achievements, architectures built, or business outcomes delivered at scale.
+- Sentence 3: Technical leadership, high-impact toolchains, and collaborative strength.
+Strictly avoid first-person pronouns ("I", "my", "me"). Keep it active, authoritative, and under 75 words.`;
+
+    const schema = {
+      type: "object",
+      properties: {
+        summary: { type: "string" },
+      },
+      required: ["summary"],
+    };
+
+    const result = await generateJson<{ summary: string }>(
+      prompt,
+      `Target Role: ${targetRole}\nRecent Experience: ${JSON.stringify(experience.slice(0, 3))}\nKey Skills: ${JSON.stringify(skills)}`,
+      schema,
+      { tier: "smart" }
+    );
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to generate summary: " + (err as Error).message });
+  }
+});
+
+// POST /api/resumes/builder: create a resume directly from structured builder data
+router.post("/builder", async (req, res) => {
+  const userId = res.locals.userId as number;
+  const { filename = "My_Resume", targetRole = "Software Engineer", jobDescription = "", templateId = "modern_tech", data } = req.body || {};
+
+  if (!data || typeof data !== "object") {
+    return res.status(400).json({ error: "Missing resume data" });
+  }
+
+  const roleStr = String(targetRole).trim().slice(0, 100) || "Software Engineer";
+  const fn = String(filename).trim().slice(0, 200) || "Resume";
+  const jd = String(jobDescription || "").trim().slice(0, 6000);
+
+  const report = evaluateResumeData(data, jd);
+
+  const resume = await prisma.resume.create({
+    data: {
+      userId,
+      filename: fn.endsWith(".pdf") ? fn : `${fn}.pdf`,
+      format: "pdf",
+      targetRole: roleStr,
+      jobDescription: jd || null,
+      status: "ready",
+      progress: "Ready",
+      original: data,
+      improved: data,
+      report: report as any,
+      review: {
+        original: data,
+        report,
+        layout: [],
+        layoutInspected: true,
+        warnings: [],
+        removed: [],
+        suggestions: ["Resume built with " + (TEMPLATES[templateId as ResumeTemplateId]?.name || "Industry Standard") + " template."],
+      } as any,
+    },
+    select: { id: true, filename: true, targetRole: true, status: true, report: true, createdAt: true },
+  });
+
+  res.status(201).json(resume);
+});
+
+// PUT /api/resumes/:id/builder: update an existing resume with builder data
+router.put("/:id/builder", async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+
+  const userId = res.locals.userId as number;
+  const resume = await prisma.resume.findFirst({ where: { id, userId } });
+  if (!resume) return res.status(404).json({ error: "Resume not found" });
+
+  const { data, targetRole, jobDescription } = req.body || {};
+  if (!data || typeof data !== "object") {
+    return res.status(400).json({ error: "Missing resume data" });
+  }
+
+  const roleStr = targetRole ? String(targetRole).trim().slice(0, 100) : resume.targetRole;
+  const jd = jobDescription !== undefined ? String(jobDescription).trim().slice(0, 6000) : (resume.jobDescription || "");
+
+  const report = evaluateResumeData(data, jd);
+
+  await prisma.resume.update({
+    where: { id },
+    data: {
+      targetRole: roleStr,
+      jobDescription: jd || null,
+      improved: data,
+      report: report as any,
+      status: "ready",
+      progress: "Ready",
+    },
+  });
+
+  res.json({ id, targetRole: roleStr, report });
+});
 
 // POST /api/resumes: upload a resume (multipart: file, targetRole, jobDescription?)
 router.post("/", uploadLimiter, upload.single("file"), async (req, res) => {
@@ -118,7 +318,7 @@ router.get("/:id", async (req, res) => {
   res.json(resume);
 });
 
-// GET /api/resumes/:id/download?format=pdf|docx
+// GET /api/resumes/:id/download?format=pdf|docx&template=...
 router.get("/:id/download", async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
@@ -135,11 +335,16 @@ router.get("/:id/download", async (req, res) => {
   const format: ResumeFormat =
     requested === "pdf" || requested === "docx" ? requested : (resume.format as ResumeFormat);
 
-  const { buffer } = await renderResume(resume.improved as unknown as ResumeData, format);
+  const requestedTemplate: ResumeTemplateId =
+    typeof req.query.template === "string" && TEMPLATES[req.query.template as ResumeTemplateId]
+      ? (req.query.template as ResumeTemplateId)
+      : "modern_tech";
+
+  const { buffer } = await renderResume(resume.improved as unknown as ResumeData, format, requestedTemplate);
 
   const base = resume.filename.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 60) || "resume";
   res.setHeader("Content-Type", MIME[format]);
-  res.setHeader("Content-Disposition", `attachment; filename="${base}_ATS.${format}"`);
+  res.setHeader("Content-Disposition", `attachment; filename="${base}_${requestedTemplate}.${format}"`);
   res.send(buffer);
 });
 

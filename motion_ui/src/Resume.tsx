@@ -10,8 +10,9 @@ import {
   listResumes,
   uploadResume,
 } from "./api.resume";
-import type { AtsReport, ResumeDetail, ResumeFormat, ResumeListItem } from "./api.resume";
+import type { AtsReport, ResumeData, ResumeDetail, ResumeFormat, ResumeListItem } from "./api.resume";
 import JobMatchPanel from "./JobMatchPanel";
+import ResumeBuilder from "./ResumeBuilder";
 
 const STATUS_LABEL: Record<string, string> = {
   queued: "Waiting",
@@ -70,6 +71,11 @@ function Checks({ report }: { report: AtsReport }) {
 }
 
 export default function Resume({ onBack }: { onBack: () => void }) {
+  const [mode, setMode] = useState<"optimize" | "builder">("optimize");
+  const [builderData, setBuilderData] = useState<ResumeData | undefined>(undefined);
+  const [builderRole, setBuilderRole] = useState<string>("Full Stack Engineer");
+  const [builderResumeId, setBuilderResumeId] = useState<number | null>(null);
+
   const [file, setFile] = useState<File | null>(null);
   const [role, setRole] = useState("");
   const [jd, setJd] = useState("");
@@ -199,6 +205,25 @@ export default function Resume({ onBack }: { onBack: () => void }) {
     }
   }
 
+  if (mode === "builder") {
+    return (
+      <ResumeBuilder
+        initialData={builderData}
+        initialRole={builderRole}
+        initialResumeId={builderResumeId}
+        onBack={() => setMode("optimize")}
+        onSaved={(id) => {
+          refreshList();
+          setSelectedId(id);
+        }}
+        onMatchJobs={(id) => {
+          setSelectedId(id);
+          setMode("optimize");
+        }}
+      />
+    );
+  }
+
   const busy = items.some((i) => isActive(i.status));
   const review = detail?.review ?? null;
   const canImprove = !!detail && (detail.status === "reviewed" || detail.status === "ready") && !!review;
@@ -210,8 +235,27 @@ export default function Resume({ onBack }: { onBack: () => void }) {
         <button className="rs-back" onClick={onBack}>
           ← Back to chat
         </button>
-        <h1>Resume optimizer</h1>
+        <h1>Resume Suite</h1>
       </header>
+
+      <div className="rs-mode-switch">
+        <button
+          className="active"
+          onClick={() => setMode("optimize")}
+        >
+          📄 Review & Optimize Upload
+        </button>
+        <button
+          onClick={() => {
+            setBuilderData(undefined);
+            setBuilderRole("Full Stack Engineer");
+            setBuilderResumeId(null);
+            setMode("builder");
+          }}
+        >
+          🛠️ Resume Builder & Industry Templates
+        </button>
+      </div>
 
       {error && (
         <div className="rs-error" role="alert">
@@ -292,7 +336,24 @@ export default function Resume({ onBack }: { onBack: () => void }) {
       {review && canImprove && (
         <>
           <section className="rs-card">
-            <h2>2. Review of your uploaded resume for {detail.targetRole}</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+              <h2 style={{ margin: 0 }}>2. Review of your uploaded resume for {detail.targetRole}</h2>
+              <button
+                className="rs-secondary"
+                style={{ fontSize: "12px", padding: "6px 12px" }}
+                onClick={() => {
+                  const resumeData = (detail.improved || detail.original) as any;
+                  if (resumeData) {
+                    setBuilderData(resumeData);
+                    setBuilderRole(detail.targetRole || "Software Engineer");
+                    setBuilderResumeId(detail.id);
+                    setMode("builder");
+                  }
+                }}
+              >
+                🎨 Edit & Format in Template Builder
+              </button>
+            </div>
             <Scores report={review.report} label="ATS readiness / 100" />
             <p className="rs-hint">
               This score comes from our own checker, applied to the file you uploaded. Real ATS products differ, and no tool can
@@ -420,6 +481,20 @@ export default function Resume({ onBack }: { onBack: () => void }) {
                   Download {other.toUpperCase()}
                 </button>
               )}
+              <button
+                className="rs-secondary"
+                onClick={() => {
+                  const resumeData = (detail.improved || detail.original) as any;
+                  if (resumeData) {
+                    setBuilderData(resumeData);
+                    setBuilderRole(detail.targetRole || "Software Engineer");
+                    setBuilderResumeId(detail.id);
+                    setMode("builder");
+                  }
+                }}
+              >
+                🎨 Edit & Switch Template in Builder
+              </button>
             </div>
             <p className="rs-hint">
               Read every line before you send it. You are responsible for each claim, and some employers have rules about using AI

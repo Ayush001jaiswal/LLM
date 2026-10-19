@@ -2,6 +2,18 @@ import { API, authHeaders, ensureOk } from "./api";
 
 /* ---------- Types (they mirror the backend) ---------- */
 export type ResumeFormat = "pdf" | "docx";
+export type ResumeTemplateId = "classic" | "modern_tech" | "executive" | "compact" | "creative";
+
+export interface TemplateConfig {
+  id: ResumeTemplateId;
+  name: string;
+  category: string;
+  description: string;
+  accentColor: string;
+  fontFamily: string;
+  headerAlign: "center" | "left";
+}
+
 export type ResumeStatus =
   | "queued" | "extracting" | "reviewed" | "improving" | "checking" | "ready" | "failed";
 
@@ -9,14 +21,40 @@ export const isActive = (s: ResumeStatus): boolean =>
   s === "queued" || s === "extracting" || s === "improving" || s === "checking";
 
 export interface ExperienceEntry {
-  title: string; company: string; location: string; start: string; end: string; bullets: string[];
+  title: string;
+  company: string;
+  location: string;
+  start: string;
+  end: string;
+  bullets: string[];
 }
-export interface ProjectEntry { name: string; tech: string; bullets: string[] }
+export interface EducationEntry {
+  school: string;
+  degree: string;
+  field: string;
+  start: string;
+  end: string;
+  details: string[];
+}
+export interface ProjectEntry {
+  name: string;
+  tech: string;
+  bullets: string[];
+}
+export interface SkillGroup {
+  label: string;
+  items: string[];
+}
 export interface ResumeData {
   contact: { name: string; email: string; phone: string; location: string; links: string[] };
   summary: string;
   experience: ExperienceEntry[];
+  education: EducationEntry[];
   projects: ProjectEntry[];
+  skills: SkillGroup[];
+  certifications: string[];
+  achievements: string[];
+  other: string[];
 }
 export interface AtsCheck { id: string; label: string; pass: boolean; detail: string; weight: number }
 export interface AtsReport {
@@ -94,16 +132,112 @@ export async function deleteResume(id: number): Promise<void> {
   await ensureOk(res);
 }
 
+export async function listTemplates(): Promise<TemplateConfig[]> {
+  const res = await fetch(`${API}/resumes/templates`, { headers: authHeaders() });
+  await ensureOk(res);
+  return res.json();
+}
+
+export async function createResumeFromBuilder(params: {
+  filename: string;
+  targetRole: string;
+  jobDescription?: string;
+  templateId?: ResumeTemplateId;
+  data: ResumeData;
+}): Promise<ResumeDetail> {
+  const res = await fetch(`${API}/resumes/builder`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(params),
+  });
+  await ensureOk(res);
+  return res.json();
+}
+
+export async function updateResumeFromBuilder(
+  id: number,
+  params: {
+    data: ResumeData;
+    targetRole?: string;
+    jobDescription?: string;
+  }
+): Promise<{ id: number; targetRole: string; report: AtsReport }> {
+  const res = await fetch(`${API}/resumes/${id}/builder`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(params),
+  });
+  await ensureOk(res);
+  return res.json();
+}
+
+export async function aiEnhanceBullet(
+  bullet: string,
+  targetRole: string,
+  context?: string
+): Promise<{ enhanced: string; actionVerb: string; metricHighlight?: string; explanation: string }> {
+  const res = await fetch(`${API}/resumes/ai/bullet`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ bullet, targetRole, context }),
+  });
+  await ensureOk(res);
+  return res.json();
+}
+
+export async function aiGenerateSummary(
+  targetRole: string,
+  experience: ExperienceEntry[],
+  skills: SkillGroup[]
+): Promise<{ summary: string }> {
+  const res = await fetch(`${API}/resumes/ai/summary`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ targetRole, experience, skills }),
+  });
+  await ensureOk(res);
+  return res.json();
+}
+
 // A plain link cannot send the login token, so the file is fetched and saved from memory
-export async function downloadResume(id: number, format: ResumeFormat, sourceName: string): Promise<void> {
-  const res = await fetch(`${API}/resumes/${id}/download?format=${format}`, { headers: authHeaders() });
+export async function downloadResume(
+  id: number,
+  format: ResumeFormat,
+  sourceName: string,
+  templateId?: ResumeTemplateId
+): Promise<void> {
+  const query = templateId ? `format=${format}&template=${templateId}` : `format=${format}`;
+  const res = await fetch(`${API}/resumes/${id}/download?${query}`, { headers: authHeaders() });
   await ensureOk(res);
   const blob = await res.blob();
   const base = sourceName.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "_") || "resume";
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${base}_ATS.${format}`;
+  a.download = templateId ? `${base}_${templateId}.${format}` : `${base}_ATS.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function renderResumeDirect(
+  data: ResumeData,
+  format: ResumeFormat,
+  templateId: ResumeTemplateId
+): Promise<void> {
+  const res = await fetch(`${API}/resumes/render`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ data, format, templateId }),
+  });
+  await ensureOk(res);
+  const blob = await res.blob();
+  const base = (data.contact.name || "Resume").replace(/[^A-Za-z0-9_-]+/g, "_") || "Resume";
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${base}_${templateId}.${format}`;
   document.body.appendChild(a);
   a.click();
   a.remove();
