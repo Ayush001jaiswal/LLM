@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { findJobs } from "./api.resume";
 import type { JobMatch, JobSearchResult, InferredProfile } from "./api.resume";
+import NetworkMatcherModal from "./NetworkMatcherModal";
 
 interface Props {
   resumeId: number;
@@ -39,7 +40,13 @@ function ProfileInsight({ profile }: { profile: InferredProfile }) {
   );
 }
 
-function JobCard({ job }: { job: JobMatch }) {
+function JobCard({
+  job,
+  onConnectNetwork,
+}: {
+  job: JobMatch;
+  onConnectNetwork?: (company: string, role: string) => void;
+}) {
   return (
     <div className="jm-card">
       <div className="jm-card-header">
@@ -99,14 +106,41 @@ function JobCard({ job }: { job: JobMatch }) {
         <p className="jm-gaps">⚠ Gaps: {job.gaps.join(", ")}</p>
       )}
 
-      <a
-        href={job.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="jm-apply"
-      >
-        View &amp; Apply →
-      </a>
+      <div style={{ display: "flex", gap: "10px", marginTop: "12px", flexWrap: "wrap" }}>
+        <a
+          href={job.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="jm-apply"
+          style={{ margin: 0, flex: "1 1 140px", textAlign: "center" }}
+        >
+          View &amp; Apply →
+        </a>
+        <button
+          type="button"
+          onClick={() => onConnectNetwork?.(job.company, job.title)}
+          style={{
+            flex: "1 1 180px",
+            background: "linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)",
+            color: "#ffffff",
+            border: "1px solid rgba(96, 165, 250, 0.4)",
+            borderRadius: "8px",
+            padding: "8px 14px",
+            fontSize: "13px",
+            fontWeight: 600,
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "6px",
+            boxShadow: "0 2px 8px rgba(37, 99, 235, 0.25)",
+            transition: "all 0.15s ease",
+          }}
+          title="Direct two-way matching: Connect with active recruiters, alumni referral bridges, and domain search firms"
+        >
+          🤝 Recruiter &amp; Network Match
+        </button>
+      </div>
     </div>
   );
 }
@@ -118,6 +152,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
   const [location, setLocation] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [filterTopOnly, setFilterTopOnly] = useState(false);
+  const [activeNetworkTarget, setActiveNetworkTarget] = useState<{ company: string; role: string } | null>(null);
 
   const ready = resumeStatus === "reviewed" || resumeStatus === "ready";
 
@@ -263,7 +298,13 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
                       </p>
                     ) : (
                       <div className="jm-cards">
-                        {displayedJobs.map((job) => <JobCard key={job.url} job={job} />)}
+                        {displayedJobs.map((job) => (
+                          <JobCard
+                            key={job.url}
+                            job={job}
+                            onConnectNetwork={(company, role) => setActiveNetworkTarget({ company, role })}
+                          />
+                        ))}
                       </div>
                     )}
                   </>
@@ -272,6 +313,15 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
             </>
           )}
         </>
+      )}
+
+      {activeNetworkTarget && (
+        <NetworkMatcherModal
+          resumeId={resumeId}
+          companyName={activeNetworkTarget.company}
+          jobTitle={activeNetworkTarget.role}
+          onClose={() => setActiveNetworkTarget(null)}
+        />
       )}
     </div>
   );

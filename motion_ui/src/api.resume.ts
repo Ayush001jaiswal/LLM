@@ -298,3 +298,76 @@ export async function findJobs(
   await ensureOk(res);
   return res.json();
 }
+
+/* ---------- Two-Way Network, Recruiter & Consultancy Matching ---------- */
+
+export interface RecruiterTarget {
+  id: string;
+  roleType: "Lead Technical Recruiter" | "Hiring Manager / Engineering Lead" | "Head of Talent / Founder";
+  targetTitle: string;
+  company: string;
+  department: string;
+  matchMode: "mutual_exact";
+  urgency: string;
+  fitReason: string;
+  linkedinSearchUrl: string;
+  suggestedAction: string;
+}
+
+export interface AlumniNetworkBridge {
+  id: string;
+  bridgeType: "University Alumni" | "Ex-Company Colleague";
+  sourceName: string;
+  targetCompany: string;
+  targetTitle: string;
+  matchMode: "either_or_referral";
+  referralImpactScore: string;
+  fitReason: string;
+  linkedinSearchUrl: string;
+  warmIntroAngle: string;
+}
+
+export interface ConsultancyMatch {
+  id: string;
+  firmName: string;
+  tier: string;
+  specialization: string;
+  regions: string[];
+  matchMode: "consultancy_partner";
+  fitReason: string;
+  website: string;
+  leadSearchUrl: string;
+  agencyPitchAngle: string;
+}
+
+export interface GeneratedPitches {
+  recruiterConnectionNote: string;
+  recruiterInMail: string;
+  alumniWarmReferralNote: string;
+  consultancyIntroBrief: string;
+}
+
+export interface NetworkMatchingResult {
+  targetCompany: string;
+  targetRole: string;
+  candidateSeniority: string;
+  candidateTopSkills: string[];
+  mutualMatches: RecruiterTarget[];
+  networkBridges: AlumniNetworkBridge[];
+  consultancies: ConsultancyMatch[];
+  pitches: GeneratedPitches;
+}
+
+export async function matchRecruiterNetwork(
+  resumeId: number,
+  params: { targetCompany?: string; targetRole?: string; location?: string } = {}
+): Promise<NetworkMatchingResult> {
+  const { API, authHeaders, ensureOk } = await import("./api");
+  const res = await fetch(`${API}/resumes/${resumeId}/network`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(params),
+  });
+  await ensureOk(res);
+  return res.json();
+}

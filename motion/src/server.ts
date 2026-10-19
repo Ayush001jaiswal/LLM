@@ -14,6 +14,7 @@ import documentsRouter from "./routes/documents.js";
 import mcpRouter, { handleSseConnect, handlePostMessage } from "./routes/mcp.js";
 import openapiRouter from "./routes/openapi.js";
 import integrationsRouter from "./routes/integrations.js";
+import networkRouter from "./routes/network.js";
 import { failStaleResumeJobs } from "./services/resume/jobs.js"; 
 
 const app = express();
@@ -52,6 +53,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/conversations/:id/documents", requireAuth, documentsRouter);
 app.use("/api/conversations", requireAuth, conversationsRouter);
 app.use("/api/resumes/:id/jobs", requireAuth, jobsRouter);
+app.use("/api/resumes/:id/network", requireAuth, networkRouter);
 app.use("/api/resumes", requireAuth, resumesRouter);
 app.use("/api/integrations", requireAuth, integrationsRouter);
 
