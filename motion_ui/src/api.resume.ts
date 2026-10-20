@@ -447,3 +447,42 @@ export async function deleteApplication(id: number): Promise<void> {
   });
   await ensureOk(res);
 }
+
+export interface RecruiterLeadItem {
+  id: string;
+  name: string;
+  roleTitle: string;
+  companyOrAgency: string;
+  type: "in_house_recruiter" | "hiring_manager" | "consultancy_partner";
+  category: "Tier-1 Unicorn" | "Global Tech Hub" | "Top AI Startup" | "Specialized Headhunter";
+  domainSpecialization: string[];
+  seniorityTarget: string[];
+  verifiedEmail: string;
+  whatsappContact?: string;
+  linkedinSearchUrl: string;
+  location: string;
+  acceptsImmediateJoiners: boolean;
+}
+
+export interface RecruiterDirectoryResponse {
+  candidateRole: string;
+  noticePeriod: string;
+  totalFound: number;
+  leads: RecruiterLeadItem[];
+}
+
+export async function fetchRecruiterDirectory(
+  resumeId: number,
+  params: { noticePeriod?: string; search?: string } = {}
+): Promise<RecruiterDirectoryResponse> {
+  const { API, authHeaders, ensureOk } = await import("./api");
+  const query = new URLSearchParams();
+  if (params.noticePeriod) query.set("noticePeriod", params.noticePeriod);
+  if (params.search) query.set("search", params.search);
+
+  const res = await fetch(`${API}/resumes/${resumeId}/network/directory?${query}`, {
+    headers: authHeaders(),
+  });
+  await ensureOk(res);
+  return res.json();
+}

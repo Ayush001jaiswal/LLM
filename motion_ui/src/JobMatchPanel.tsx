@@ -3,6 +3,7 @@ import { findJobs } from "./api.resume";
 import type { JobMatch, JobSearchResult, InferredProfile } from "./api.resume";
 import NetworkMatcherModal from "./NetworkMatcherModal";
 import ApplicationTrackerPanel from "./ApplicationTrackerPanel";
+import RecruiterBroadcastHub from "./RecruiterBroadcastHub";
 
 interface Props {
   resumeId: number;
@@ -153,7 +154,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
   const [location, setLocation] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [filterTopOnly, setFilterTopOnly] = useState(false);
-  const [panelView, setPanelView] = useState<"search" | "tracker">("search");
+  const [panelView, setPanelView] = useState<"search" | "recruiters" | "tracker">("search");
   const [pageSize, setPageSize] = useState<number>(10);
   const [activeNetworkTarget, setActiveNetworkTarget] = useState<{ company: string; role: string } | null>(null);
 
@@ -212,6 +213,22 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
         </button>
         <button
           type="button"
+          onClick={() => setPanelView("recruiters")}
+          style={{
+            background: panelView === "recruiters" ? "linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)" : "transparent",
+            color: panelView === "recruiters" ? "#fff" : "#f472b6",
+            border: panelView === "recruiters" ? "none" : "1px solid rgba(236, 72, 153, 0.4)",
+            borderRadius: "8px",
+            padding: "8px 16px",
+            fontSize: "13.5px",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          🚀 Mass Recruiter &amp; Headhunter Broadcast
+        </button>
+        <button
+          type="button"
           onClick={() => setPanelView("tracker")}
           style={{
             background: panelView === "tracker" ? "linear-gradient(135deg, #10b981 0%, #059669 100%)" : "transparent",
@@ -229,6 +246,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
       </div>
 
       {panelView === "tracker" && <ApplicationTrackerPanel />}
+      {panelView === "recruiters" && <RecruiterBroadcastHub resumeId={resumeId} />}
 
       {panelView === "search" && (
         <>
