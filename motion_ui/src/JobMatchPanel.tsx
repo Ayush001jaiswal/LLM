@@ -2,6 +2,7 @@ import { useState } from "react";
 import { findJobs } from "./api.resume";
 import type { JobMatch, JobSearchResult, InferredProfile } from "./api.resume";
 import NetworkMatcherModal from "./NetworkMatcherModal";
+import ApplicationTrackerPanel from "./ApplicationTrackerPanel";
 
 interface Props {
   resumeId: number;
@@ -152,6 +153,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
   const [location, setLocation] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [filterTopOnly, setFilterTopOnly] = useState(false);
+  const [panelView, setPanelView] = useState<"search" | "tracker">("search");
   const [activeNetworkTarget, setActiveNetworkTarget] = useState<{ company: string; role: string } | null>(null);
 
   const ready = resumeStatus === "reviewed" || resumeStatus === "ready";
@@ -189,6 +191,47 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
         AI reads your full profile — skills, domains, career trajectory — and finds
         jobs that actually fit, not just ones that match keywords.
       </p>
+      {/* View Switcher: Matching Jobs vs Application CRM */}
+      <div style={{ display: "flex", gap: "10px", margin: "16px 0", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: "12px" }}>
+        <button
+          type="button"
+          onClick={() => setPanelView("search")}
+          style={{
+            background: panelView === "search" ? "#2563eb" : "transparent",
+            color: panelView === "search" ? "#fff" : "var(--text)",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            padding: "8px 16px",
+            fontSize: "13.5px",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          🎯 Job Matching Engine
+        </button>
+        <button
+          type="button"
+          onClick={() => setPanelView("tracker")}
+          style={{
+            background: panelView === "tracker" ? "linear-gradient(135deg, #10b981 0%, #059669 100%)" : "transparent",
+            color: panelView === "tracker" ? "#fff" : "#34d399",
+            border: panelView === "tracker" ? "none" : "1px solid rgba(16, 185, 129, 0.4)",
+            borderRadius: "8px",
+            padding: "8px 16px",
+            fontSize: "13.5px",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          📊 Application Tracker &amp; Outreach CRM
+        </button>
+      </div>
+
+      {panelView === "tracker" && <ApplicationTrackerPanel />}
+
+      {panelView === "search" && (
+        <>
+
 
       {/* Filters */}
       <div className="jm-filters">
@@ -410,6 +453,9 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
               })()}
             </>
           )}
+        </>
+      )}
+
         </>
       )}
 

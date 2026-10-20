@@ -48,6 +48,11 @@ export type DocumentChunk = Prisma.DocumentChunkModel
  */
 export type Resume = Prisma.ResumeModel
 /**
+ * Model JobApplication
+ * 
+ */
+export type JobApplication = Prisma.JobApplicationModel
+/**
  * Model KnowledgeChunk
  * 
  */

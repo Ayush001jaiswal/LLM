@@ -13,13 +13,14 @@ datasource db {
 }
 
 model User {
-  id            Int                   @id @default(autoincrement())
-  email         String                @unique
-  passwordHash  String
-  createdAt     DateTime              @default(now())
-  conversations Conversation[]
-  resumes       Resume[]
-  mcpServers    McpServerConnection[]
+  id              Int                   @id @default(autoincrement())
+  email           String                @unique
+  passwordHash    String
+  createdAt       DateTime              @default(now())
+  conversations   Conversation[]
+  resumes         Resume[]
+  mcpServers      McpServerConnection[]
+  jobApplications JobApplication[]
 }
 
 model Conversation {
@@ -72,26 +73,54 @@ model DocumentChunk {
 }
 
 model Resume {
-  id             Int      @id @default(autoincrement())
+  id             Int              @id @default(autoincrement())
   userId         Int
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   filename       String
   format         String
   targetRole     String
   jobDescription String?
   instructions   String?
-  status         String   @default("queued")
-  progress       String   @default("")
+  status         String           @default("queued")
+  progress       String           @default("")
   error          String?
   original       Json?
   improved       Json?
   review         Json?
   report         Json?
   notes          Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now()) @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now()) @updatedAt
+  applications   JobApplication[]
 
   @@index([userId])
+}
+
+model JobApplication {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resumeId        Int?
+  resume          Resume?   @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  company         String
+  role            String
+  location        String?
+  salary          String?
+  jobUrl          String?
+  status          String    @default("bookmarked") // "bookmarked", "connected", "follow_up_due", "interview", "offer", "rejected"
+  leadName        String?   // Recruiter or hiring manager name
+  leadTitle       String?   // e.g. "Senior Engineering Manager"
+  leadEmail       String?   // Corporate work email (e.g. john.doe@uber.com)
+  leadLinkedin    String?
+  outreachNotes   String?   // Sent pitches or notes
+  appliedAt       DateTime?
+  nextFollowUpAt  DateTime? // Scheduled follow-up reminder
+  lastContactedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  @@index([userId])
+  @@index([status])
 }
 
 model KnowledgeChunk {
@@ -122,4 +151,3 @@ model McpServerConnection {
 
   @@index([userId])
 }
-

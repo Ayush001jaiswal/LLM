@@ -57,6 +57,7 @@ export const ModelName = {
   Document: 'Document',
   DocumentChunk: 'DocumentChunk',
   Resume: 'Resume',
+  JobApplication: 'JobApplication',
   KnowledgeChunk: 'KnowledgeChunk',
   McpServerConnection: 'McpServerConnection'
 } as const
@@ -154,6 +155,31 @@ export const ResumeScalarFieldEnum = {
 } as const
 
 export type ResumeScalarFieldEnum = (typeof ResumeScalarFieldEnum)[keyof typeof ResumeScalarFieldEnum]
+
+
+export const JobApplicationScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  resumeId: 'resumeId',
+  company: 'company',
+  role: 'role',
+  location: 'location',
+  salary: 'salary',
+  jobUrl: 'jobUrl',
+  status: 'status',
+  leadName: 'leadName',
+  leadTitle: 'leadTitle',
+  leadEmail: 'leadEmail',
+  leadLinkedin: 'leadLinkedin',
+  outreachNotes: 'outreachNotes',
+  appliedAt: 'appliedAt',
+  nextFollowUpAt: 'nextFollowUpAt',
+  lastContactedAt: 'lastContactedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type JobApplicationScalarFieldEnum = (typeof JobApplicationScalarFieldEnum)[keyof typeof JobApplicationScalarFieldEnum]
 
 
 export const KnowledgeChunkScalarFieldEnum = {

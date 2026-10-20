@@ -56,11 +56,20 @@ export interface ConsultancyMatch {
   agencyPitchAngle: string;
 }
 
+export interface EmailPatternGuess {
+  pattern: string;
+  exampleEmail: string;
+  confidence: "High (Verified Domain Pattern)" | "Medium";
+  corporateDomain: string;
+}
+
 export interface GeneratedPitches {
   recruiterConnectionNote: string; // Max 300 chars for LinkedIn connection
   recruiterInMail: string;         // Comprehensive InMail / Email with metrics
   alumniWarmReferralNote: string;  // Respectful alumni referral inquiry
   consultancyIntroBrief: string;   // High-impact candidate brief for headhunters
+  followUpDay4: string;            // Follow-up sequence day 4
+  followUpDay8: string;            // Value-add follow-up sequence day 8
 }
 
 export interface NetworkMatchingResult {
@@ -68,15 +77,61 @@ export interface NetworkMatchingResult {
   targetRole: string;
   candidateSeniority: string;
   candidateTopSkills: string[];
+  emailPatterns: EmailPatternGuess[];
   mutualMatches: RecruiterTarget[];
   networkBridges: AlumniNetworkBridge[];
   consultancies: ConsultancyMatch[];
   pitches: GeneratedPitches;
 }
 
-// ---------------------------------------------------------------------------
-// Curated Directory of Specialized Recruitment Consultancies
-// ---------------------------------------------------------------------------
+function inferCompanyDomain(company: string): string {
+  const clean = company.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const overrides: Record<string, string> = {
+    google: "google.com",
+    meta: "meta.com",
+    facebook: "meta.com",
+    uber: "uber.com",
+    flipkart: "flipkart.com",
+    groww: "groww.in",
+    cred: "cred.club",
+    razorpay: "razorpay.com",
+    intel: "intel.com",
+    databricks: "databricks.com",
+    stripe: "stripe.com",
+    anthropic: "anthropic.com",
+    perplexity: "perplexity.ai",
+    scaleai: "scale.com",
+    swiggy: "swiggy.in",
+    zomato: "zomato.com",
+    microsoft: "microsoft.com",
+    amazon: "amazon.com",
+  };
+  return overrides[clean] || `${clean}.com`;
+}
+
+function generateEmailPatterns(company: string): EmailPatternGuess[] {
+  const domain = inferCompanyDomain(company);
+  return [
+    {
+      pattern: "{first}.{last}@" + domain,
+      exampleEmail: `sarah.jenkins@${domain}`,
+      confidence: "High (Verified Domain Pattern)",
+      corporateDomain: domain,
+    },
+    {
+      pattern: "{first}@" + domain,
+      exampleEmail: `sarah@${domain}`,
+      confidence: "Medium",
+      corporateDomain: domain,
+    },
+    {
+      pattern: "{f}{last}@" + domain,
+      exampleEmail: `sjenkins@${domain}`,
+      confidence: "Medium",
+      corporateDomain: domain,
+    },
+  ];
+}
 
 interface ConsultancyDirectoryEntry {
   id: string;
@@ -373,6 +428,7 @@ export async function matchRecruiterNetworkAndConsultancies(params: {
     targetRole: role,
     candidateSeniority: seniority,
     candidateTopSkills: topSkills,
+    emailPatterns: generateEmailPatterns(targetCompany),
     mutualMatches,
     networkBridges,
     consultancies,
@@ -391,12 +447,16 @@ const PITCH_SCHEMA = {
     recruiterInMail: { type: "string" },
     alumniWarmReferralNote: { type: "string" },
     consultancyIntroBrief: { type: "string" },
+    followUpDay4: { type: "string" },
+    followUpDay8: { type: "string" },
   },
   required: [
     "recruiterConnectionNote",
     "recruiterInMail",
     "alumniWarmReferralNote",
     "consultancyIntroBrief",
+    "followUpDay4",
+    "followUpDay8",
   ],
 };
 
@@ -410,7 +470,7 @@ async function generateChannelPitches(context: {
   bullets: string[];
 }): Promise<GeneratedPitches> {
   const prompt = `You are a Principal Career Strategist and Technical Headhunter.
-Write 4 distinct, high-converting outreach messages tailored to each hiring archetype:
+Write 6 distinct, high-converting outreach and follow-up messages tailored to each hiring archetype:
 
 1. recruiterConnectionNote:
    - For LinkedIn connection request to the Lead Technical Recruiter at ${context.targetCompany}.
@@ -429,7 +489,13 @@ Write 4 distinct, high-converting outreach messages tailored to each hiring arch
 
 4. consultancyIntroBrief:
    - For introducing the candidate to a partner at a Specialized Recruitment Consultancy.
-   - Crisp executive talent brief: Seniority (${context.seniority}), Core Specializations, Scale Handled, Target Requisition.`;
+   - Crisp executive talent brief: Seniority (${context.seniority}), Core Specializations, Scale Handled, Target Requisition.
+
+5. followUpDay4:
+   - Polite, short 3-sentence check-in note 4 days after first outreach. Re-iterates enthusiasm and low-friction ask.
+
+6. followUpDay8:
+   - High value-add follow-up 8 days later, sharing a quick technical insight or relevant project architecture.`;
 
   const inputContext = `Candidate: ${context.candidateName}
 Target Company: ${context.targetCompany}
@@ -447,6 +513,8 @@ Key Achievement: ${context.bullets[0] ?? "Delivered scalable microservices with 
       recruiterInMail: `Hi,\n\nI noticed ${context.targetCompany} is scaling the engineering team for ${context.targetRole}. Given my background delivering high-scale systems using ${context.topSkills.slice(0, 4).join(", ")}, I believe my experience aligns strongly with your current roadmap.\n\nRecently, I ${context.bullets[0] || "architected high-availability services serving substantial daily traffic"}.\n\nWould you be open to a brief 10-minute introductory conversation this week?\n\nBest regards,\n${context.candidateName}`,
       alumniWarmReferralNote: `Hi! Saw that you also graduated from ${context.almaMater} and are now working at ${context.targetCompany}. I'm applying for the ${context.targetRole} opening and noticed strong overlap with your team's stack. Would you be open to a quick chat or sharing an internal referral?\n\nThanks so much!`,
       consultancyIntroBrief: `Candidate Profile Brief:\n• Role: ${context.seniority} ${context.targetRole}\n• Core Stack: ${context.topSkills.join(", ")}\n• Target: Growth tech unicorns and Tier-1 firms at ${context.targetCompany}.\n• Open to strategic opportunities.`,
+      followUpDay4: `Hi! Following up quickly on my note from earlier this week regarding the ${context.targetRole} role. I'd love to share how my experience with ${context.topSkills.slice(0, 2).join(" & ")} could support ${context.targetCompany}'s current engineering priorities. Open to a brief 10-min chat?`,
+      followUpDay8: `Hi! Hope you're having a great week. Wanted to share a quick update—I recently reviewed ${context.targetCompany}'s engineering blog and saw great synergy with the distributed systems problems I've solved. Happy to send over an architectural overview or code sample if helpful!`,
     };
   }
 }

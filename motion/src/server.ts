@@ -15,6 +15,7 @@ import mcpRouter, { handleSseConnect, handlePostMessage } from "./routes/mcp.js"
 import openapiRouter from "./routes/openapi.js";
 import integrationsRouter from "./routes/integrations.js";
 import networkRouter from "./routes/network.js";
+import applicationsRouter from "./routes/applications.js";
 import { failStaleResumeJobs } from "./services/resume/jobs.js"; 
 
 const app = express();
@@ -56,6 +57,7 @@ app.use("/api/resumes/:id/jobs", requireAuth, jobsRouter);
 app.use("/api/resumes/:id/network", requireAuth, networkRouter);
 app.use("/api/resumes", requireAuth, resumesRouter);
 app.use("/api/integrations", requireAuth, integrationsRouter);
+app.use("/api/applications", requireAuth, applicationsRouter);
 
 // Remote MCP (SSE) - For Claude, Cursor, and remote AI agents
 app.get("/sse", (req, res) => handleSseConnect(req, res, "/messages"));
