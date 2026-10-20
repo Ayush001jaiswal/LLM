@@ -549,9 +549,9 @@ function formatSalary(job: MarketJob): string | null {
 // Main export
 // ---------------------------------------------------------------------------
 export async function findMatchingJobs(params: JobSearchParams): Promise<JobSearchResult> {
-  const { resumeData, targetRole, location, remoteOnly = false, page = 1, pageSize = 10, limit } = params;
+  const { resumeData, targetRole, location, remoteOnly = false, page = 1, pageSize = 50, limit } = params;
   const warnings: string[] = [];
-  const effectivePageSize = limit ? Math.min(limit, 20) : Math.min(Math.max(pageSize, 1), 50);
+  const effectivePageSize = limit ? Math.min(limit, 500) : Math.min(Math.max(pageSize, 1), 500);
   const effectivePage = Math.max(page, 1);
 
   // Step 1 — Profile analysis via LLM
@@ -656,25 +656,30 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<JobSear
 
   // Step 5 — Deep LLM Evaluation on the active page slice
   const evaluations = await Promise.all(
-    pageSlice.map(async ({ job, matchedSkills }) => {
-      try {
-        const evaluation = await evaluateJob(job, profile);
-        return { job, evaluation, matchedSkills };
-      } catch {
-        // Fallback calculation calibrated from relevance score
-        const relScore = calculateJobRelevance(job, profile, targetRole).relevanceScore;
-        const normalized = Math.min(10, Math.max(6, Math.round(relScore / 10)));
-        return {
-          job,
-          evaluation: {
-            score: normalized,
-            reason: `Role aligns with your background in ${profile.seniorityBand} engineering and ${matchedSkills.slice(0, 2).join(", ") || "core tech"}.`,
-            strengths: matchedSkills.slice(0, 3),
-            gaps: [],
-          },
-          matchedSkills,
-        };
+    pageSlice.map(async ({ job, matchedSkills }, idx) => {
+      // Evaluate top 15 items with Gemini for deep narrative, and calibrate remainder with smart heuristics to ensure instant page delivery
+      if (idx < 15) {
+        try {
+          const evaluation = await evaluateJob(job, profile);
+          return { job, evaluation, matchedSkills };
+        } catch {
+          // Fall through to calibrated fallback
+        }
       }
+
+      // Robust calibrated calculation from multi-factor relevance score
+      const relScore = calculateJobRelevance(job, profile, targetRole).relevanceScore;
+      const normalized = Math.min(10, Math.max(6, Math.round(relScore / 10)));
+      return {
+        job,
+        evaluation: {
+          score: normalized,
+          reason: `Role aligns with your background in ${profile.seniorityBand} engineering and ${matchedSkills.slice(0, 2).join(", ") || "core tech"}.`,
+          strengths: matchedSkills.slice(0, 3),
+          gaps: [],
+        },
+        matchedSkills,
+      };
     })
   );
 

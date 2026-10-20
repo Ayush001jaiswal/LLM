@@ -154,11 +154,12 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [filterTopOnly, setFilterTopOnly] = useState(false);
   const [panelView, setPanelView] = useState<"search" | "tracker">("search");
+  const [pageSize, setPageSize] = useState<number>(50);
   const [activeNetworkTarget, setActiveNetworkTarget] = useState<{ company: string; role: string } | null>(null);
 
   const ready = resumeStatus === "reviewed" || resumeStatus === "ready";
 
-  async function handleSearch(targetPage = 1) {
+  async function handleSearch(targetPage = 1, chosenPageSize = pageSize) {
     setState("loading");
     setError(null);
     try {
@@ -166,7 +167,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
         location: location.trim() || undefined,
         remoteOnly,
         page: targetPage,
-        pageSize: 10,
+        pageSize: chosenPageSize,
       });
       setResult(data);
       setState("done");
@@ -332,9 +333,37 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
                       </button>
                     </div>
 
-                    <p className="jm-count">
-                      Showing page {result.page} of {result.totalPages} ({result.totalJobs} total relevant jobs matched)
-                    </p>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", margin: "14px 0" }}>
+                      <p className="jm-count" style={{ margin: 0 }}>
+                        Showing <strong>{displayedJobs.length}</strong> of <strong>{result.totalJobs}</strong> total relevant jobs (Page {result.page} of {result.totalPages})
+                      </p>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "12.5px", color: "#9ca3af" }}>Show per page:</span>
+                        {[25, 50, 100].map((sz) => (
+                          <button
+                            key={sz}
+                            type="button"
+                            onClick={() => {
+                              setPageSize(sz);
+                              handleSearch(1, sz);
+                            }}
+                            style={{
+                              background: pageSize === sz ? "rgba(59, 130, 246, 0.25)" : "transparent",
+                              border: pageSize === sz ? "1px solid #3b82f6" : "1px solid rgba(255, 255, 255, 0.15)",
+                              color: pageSize === sz ? "#60a5fa" : "#9ca3af",
+                              borderRadius: "6px",
+                              padding: "3px 10px",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {sz}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
                     {displayedJobs.length === 0 ? (
                       <p className="jm-empty">
