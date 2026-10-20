@@ -28,9 +28,11 @@ router.post("/", uploadLimiter, async (req, res) => {
 
   const resumeData = (resume.improved ?? resume.original) as unknown as ResumeData;
 
-  const location  = typeof req.body?.location   === "string" ? req.body.location.trim()   : undefined;
+  const location   = typeof req.body?.location   === "string" ? req.body.location.trim()   : undefined;
   const remoteOnly = req.body?.remoteOnly === true;
-  const limit     = typeof req.body?.limit      === "number" ? Math.min(req.body.limit, 20) : 10;
+  const page       = typeof req.body?.page       === "number" ? Math.max(1, req.body.page) : 1;
+  const pageSize   = typeof req.body?.pageSize   === "number" ? Math.min(Math.max(1, req.body.pageSize), 50) : 10;
+  const limit      = typeof req.body?.limit      === "number" ? Math.min(req.body.limit, 20) : undefined;
 
   try {
     const result = await findMatchingJobs({
@@ -38,6 +40,8 @@ router.post("/", uploadLimiter, async (req, res) => {
       targetRole: resume.targetRole,
       location,
       remoteOnly,
+      page,
+      pageSize,
       limit,
     });
 

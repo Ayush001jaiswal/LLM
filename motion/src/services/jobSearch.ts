@@ -23,7 +23,9 @@ export interface JobSearchParams {
   targetRole: string;
   location?: string;       // overrides resume location
   remoteOnly?: boolean;
-  limit?: number;          // default 10
+  page?: number;           // default 1
+  pageSize?: number;       // default 10
+  limit?: number;          // optional legacy override
 }
 
 export interface JobMatch {
@@ -43,7 +45,7 @@ export interface JobMatch {
   tierBadge?: string;
 }
 
-interface InferredProfile {
+export interface InferredProfile {
   inferredDomains: string[];
   technicalDepth: string;
   careerTrajectory: string;
@@ -52,6 +54,16 @@ interface InferredProfile {
   searchQueries: string[];
   hardExclusions: string[];
   allSkills: string[];
+}
+
+export interface JobSearchResult {
+  jobs: JobMatch[];
+  totalJobs: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  profile: InferredProfile;
+  warnings: string[];
 }
 
 export interface MarketJob {
@@ -356,6 +368,70 @@ function balanceSources(jobs: MarketJob[], maxTotal = 30): MarketJob[] {
 }
 
 // ---------------------------------------------------------------------------
+// Step 3 — Relevance & Tier-Based Heuristic Scorer for Large Corpus Ranking
+// ---------------------------------------------------------------------------
+interface ScoredMarketJob {
+  job: MarketJob;
+  relevanceScore: number;
+  matchedSkills: string[];
+}
+
+function calculateJobRelevance(job: MarketJob, profile: InferredProfile, targetRole: string): ScoredMarketJob {
+  let score = 0;
+  const titleLower = job.title.toLowerCase();
+  const descLower = (job.description || "").toLowerCase();
+  const fullText = `${titleLower} ${descLower}`;
+
+  // 1. Target Role & Title Alignment (0 - 35 points)
+  const roleTokens = targetRole.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+  let titleMatches = 0;
+  for (const token of roleTokens) {
+    if (titleLower.includes(token)) titleMatches++;
+  }
+  if (roleTokens.length > 0) {
+    score += Math.round((titleMatches / roleTokens.length) * 35);
+  }
+
+  // 2. Primary Skills Match (0 - 35 points)
+  const matchedSkills: string[] = [];
+  for (const skill of profile.allSkills) {
+    const sLower = skill.toLowerCase();
+    if (fullText.includes(sLower)) {
+      matchedSkills.push(skill);
+    }
+  }
+  const skillRatio = Math.min(1, matchedSkills.length / Math.max(4, Math.min(profile.allSkills.length, 10)));
+  score += Math.round(skillRatio * 35);
+
+  // 3. Seniority Band Alignment (0 - 15 points)
+  const seniority = profile.seniorityBand.toLowerCase();
+  if (seniority === "senior" || seniority === "lead" || seniority === "principal") {
+    if (/senior|sr\.|lead|principal|staff|architect/i.test(titleLower)) score += 15;
+    else if (/intern|junior|entry/i.test(titleLower)) score -= 20; // penalize mismatch
+    else score += 8;
+  } else if (seniority === "junior" || seniority === "intern") {
+    if (/junior|intern|graduate|entry|associate/i.test(titleLower)) score += 15;
+    else if (/senior|staff|principal|lead|director/i.test(titleLower)) score -= 25;
+    else score += 10;
+  } else {
+    // mid-level
+    if (!/intern|director|vp|head of/i.test(titleLower)) score += 12;
+  }
+
+  // 4. Company Prestige / Tier Boost (0 - 25 points)
+  const tierBadge = getTierBadge(job.company.display_name);
+  if (tierBadge) {
+    score += tierBadge.includes("AI") ? 25 : 20;
+  }
+
+  return {
+    job,
+    relevanceScore: Math.max(0, score),
+    matchedSkills: matchedSkills.slice(0, 6),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Step 3 — Pre-filter
 // ---------------------------------------------------------------------------
 function preFilter(jobs: MarketJob[], profile: InferredProfile): MarketJob[] {
@@ -472,15 +548,13 @@ function formatSalary(job: MarketJob): string | null {
 // ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
-export async function findMatchingJobs(params: JobSearchParams): Promise<{
-  jobs: JobMatch[];
-  profile: InferredProfile;
-  warnings: string[];
-}> {
-  const { resumeData, targetRole, location, remoteOnly = false, limit = 10 } = params;
+export async function findMatchingJobs(params: JobSearchParams): Promise<JobSearchResult> {
+  const { resumeData, targetRole, location, remoteOnly = false, page = 1, pageSize = 10, limit } = params;
   const warnings: string[] = [];
+  const effectivePageSize = limit ? Math.min(limit, 20) : Math.min(Math.max(pageSize, 1), 50);
+  const effectivePage = Math.max(page, 1);
 
-  // Step 1 — Profile analysis
+  // Step 1 — Profile analysis via LLM
   const profile = await analyzeProfile(resumeData, targetRole);
 
   const searchLocation = location || resumeData.contact.location || "India";
@@ -547,68 +621,65 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     raw = deduplicateJobs(fallbackJobs);
   }
 
-  // Step 3 — Pre-filter and prioritize Top Tech & AI Startups
+  // Step 3 — Strict Relevance Filtering against Resume Title, Skills, and Experience
   let filtered = preFilter(raw, profile);
-  // If preFilter dropped too many, use raw jobs so the user gets results
   if (filtered.length < 5 && raw.length > 0) {
     filtered = raw;
   }
 
-  // Guarantee Top Tech & AI Startups are prioritized in candidate evaluation
-  const tierBadged = filtered.filter((j) => getTierBadge(j.company.display_name));
-  const generalMarket = filtered.filter((j) => !getTierBadge(j.company.display_name));
+  // Score all retrieved jobs using comprehensive relevance heuristics
+  const allScoredCandidates: ScoredMarketJob[] = filtered.map((job) =>
+    calculateJobRelevance(job, profile, targetRole)
+  );
 
-  // Balance general market sources (Adzuna, Remotive, RemoteOK, Jobicy, Arbeitnow, LinkedIn/Indeed)
-  const balancedGeneral = balanceSources(generalMarket, 16);
-  // Tier-badged jobs first, followed by balanced general market jobs, up to 25 candidates
-  let candidates = deduplicateJobs([...tierBadged, ...balancedGeneral]).slice(0, 25);
+  // Sort globally by relevance score descending (Top tier companies + strong skill/experience alignment float to top)
+  allScoredCandidates.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-  if (candidates.length === 0) {
+  const totalJobs = allScoredCandidates.length;
+  const totalPages = Math.max(1, Math.ceil(totalJobs / effectivePageSize));
+
+  if (totalJobs === 0) {
     return {
       jobs: [],
+      totalJobs: 0,
+      page: effectivePage,
+      pageSize: effectivePageSize,
+      totalPages: 1,
       profile,
-      warnings: [...warnings, "No active job listings found for this specific query across market boards. Try broadening the role or location."],
+      warnings: [...warnings, "No relevant job listings matched your skills and target role. Try broadening the role title or location."],
     };
   }
 
-  // Step 4 — LLM evaluation in parallel (capped at 15 for fast response)
+  // Step 4 — Paginate: select the exact slice for the requested page
+  const startIndex = (effectivePage - 1) * effectivePageSize;
+  const pageSlice = allScoredCandidates.slice(startIndex, startIndex + effectivePageSize);
+
+  // Step 5 — Deep LLM Evaluation on the active page slice
   const evaluations = await Promise.all(
-    candidates.slice(0, 15).map(async (job) => {
+    pageSlice.map(async ({ job, matchedSkills }) => {
       try {
         const evaluation = await evaluateJob(job, profile);
-        return { job, evaluation };
+        return { job, evaluation, matchedSkills };
       } catch {
-        // Fallback score if individual job evaluation fails
-        const matched = findMatchedSkills(job, profile);
-        const fallbackScore = Math.min(9, Math.max(5, Math.round((matched.length / Math.max(profile.allSkills.length, 1)) * 10) + 4));
+        // Fallback calculation calibrated from relevance score
+        const relScore = calculateJobRelevance(job, profile, targetRole).relevanceScore;
+        const normalized = Math.min(10, Math.max(6, Math.round(relScore / 10)));
         return {
           job,
           evaluation: {
-            score: fallbackScore,
-            reason: `Role aligns with your background in ${profile.seniorityBand} engineering.`,
-            strengths: matched.slice(0, 3),
+            score: normalized,
+            reason: `Role aligns with your background in ${profile.seniorityBand} engineering and ${matchedSkills.slice(0, 2).join(", ") || "core tech"}.`,
+            strengths: matchedSkills.slice(0, 3),
             gaps: [],
           },
+          matchedSkills,
         };
       }
     })
   );
 
-  // Step 5 — Build final ranked list with priority boost for Top Tech & AI Startups
-  const scored = evaluations
-    .filter((e): e is NonNullable<typeof e> => e !== null)
-    .sort((a, b) => {
-      const aBadge = getTierBadge(a.job.company.display_name);
-      const bBadge = getTierBadge(b.job.company.display_name);
-      // Give top tech companies & AI startups priority in sorting
-      const aScore = a.evaluation.score + (aBadge ? 2 : 0);
-      const bScore = b.evaluation.score + (bBadge ? 2 : 0);
-      return bScore - aScore;
-    })
-    .slice(0, limit);
-
-  const jobs: JobMatch[] = scored.map(({ job, evaluation }, idx) => ({
-    rank:          idx + 1,
+  const jobs: JobMatch[] = evaluations.map(({ job, evaluation, matchedSkills }, idx) => ({
+    rank:          startIndex + idx + 1,
     score:         evaluation.score,
     title:         job.title,
     company:       job.company.display_name,
@@ -617,12 +688,20 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<{
     postedAt:      job.created,
     url:           job.redirect_url,
     snippet:       job.description.slice(0, 200),
-    matchedSkills: findMatchedSkills(job, profile),
+    matchedSkills: matchedSkills.length > 0 ? matchedSkills : findMatchedSkills(job, profile),
     fitReason:     evaluation.reason,
     gaps:          evaluation.gaps,
     source:        job.source || "Market",
     tierBadge:     getTierBadge(job.company.display_name),
   }));
 
-  return { jobs, profile, warnings };
+  return {
+    jobs,
+    totalJobs,
+    page: effectivePage,
+    pageSize: effectivePageSize,
+    totalPages,
+    profile,
+    warnings,
+  };
 }

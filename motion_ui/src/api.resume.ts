@@ -274,6 +274,10 @@ export interface InferredProfile {
 
 export interface JobSearchResult {
   jobs: JobMatch[];
+  totalJobs: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
   profile: InferredProfile;
   warnings: string[];
 }
@@ -281,6 +285,8 @@ export interface JobSearchResult {
 export interface JobSearchParams {
   location?: string;
   remoteOnly?: boolean;
+  page?: number;
+  pageSize?: number;
   limit?: number;
 }
 

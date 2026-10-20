@@ -156,14 +156,15 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
 
   const ready = resumeStatus === "reviewed" || resumeStatus === "ready";
 
-  async function handleSearch() {
+  async function handleSearch(targetPage = 1) {
     setState("loading");
     setError(null);
     try {
       const data = await findJobs(resumeId, {
         location: location.trim() || undefined,
         remoteOnly,
-        limit: 10,
+        page: targetPage,
+        pageSize: 10,
       });
       setResult(data);
       setState("done");
@@ -210,7 +211,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
         </label>
         <button
           className="jm-btn"
-          onClick={handleSearch}
+          onClick={() => handleSearch(1)}
           disabled={state === "loading"}
         >
           {state === "loading" ? "Analyzing your profile…" : "Find Matching Jobs"}
@@ -289,7 +290,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
                     </div>
 
                     <p className="jm-count">
-                      {displayedJobs.length} {filterTopOnly ? "Top Tech & AI Startup" : ""} jobs ranked for your profile
+                      Showing page {result.page} of {result.totalPages} ({result.totalJobs} total relevant jobs matched)
                     </p>
 
                     {displayedJobs.length === 0 ? (
@@ -297,15 +298,112 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
                         No direct Top Tech openings matched this specific search. Click "All Market Jobs" to view full market listings.
                       </p>
                     ) : (
-                      <div className="jm-cards">
-                        {displayedJobs.map((job) => (
-                          <JobCard
-                            key={job.url}
-                            job={job}
-                            onConnectNetwork={(company, role) => setActiveNetworkTarget({ company, role })}
-                          />
-                        ))}
-                      </div>
+                      <>
+                        <div className="jm-cards">
+                          {displayedJobs.map((job) => (
+                            <JobCard
+                              key={job.url}
+                              job={job}
+                              onConnectNetwork={(company, role) => setActiveNetworkTarget({ company, role })}
+                            />
+                          ))}
+                        </div>
+
+                        {/* Pagination Navigation */}
+                        {result.totalPages > 1 && (
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              gap: "8px",
+                              marginTop: "24px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              disabled={result.page <= 1}
+                              onClick={() => handleSearch(1)}
+                              style={{
+                                background: "rgba(255, 255, 255, 0.05)",
+                                border: "1px solid rgba(255, 255, 255, 0.15)",
+                                color: result.page <= 1 ? "#6b7280" : "#f3f4f6",
+                                padding: "6px 12px",
+                                borderRadius: "6px",
+                                cursor: result.page <= 1 ? "not-allowed" : "pointer",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                              }}
+                            >
+                              « First
+                            </button>
+                            <button
+                              type="button"
+                              disabled={result.page <= 1}
+                              onClick={() => handleSearch(result.page - 1)}
+                              style={{
+                                background: "rgba(255, 255, 255, 0.05)",
+                                border: "1px solid rgba(255, 255, 255, 0.15)",
+                                color: result.page <= 1 ? "#6b7280" : "#f3f4f6",
+                                padding: "6px 14px",
+                                borderRadius: "6px",
+                                cursor: result.page <= 1 ? "not-allowed" : "pointer",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                              }}
+                            >
+                              ‹ Prev
+                            </button>
+
+                            <span
+                              style={{
+                                fontSize: "13px",
+                                color: "#9ca3af",
+                                padding: "0 8px",
+                                fontWeight: 600,
+                              }}
+                            >
+                              Page {result.page} of {result.totalPages}
+                            </span>
+
+                            <button
+                              type="button"
+                              disabled={result.page >= result.totalPages}
+                              onClick={() => handleSearch(result.page + 1)}
+                              style={{
+                                background: "rgba(255, 255, 255, 0.05)",
+                                border: "1px solid rgba(255, 255, 255, 0.15)",
+                                color: result.page >= result.totalPages ? "#6b7280" : "#f3f4f6",
+                                padding: "6px 14px",
+                                borderRadius: "6px",
+                                cursor: result.page >= result.totalPages ? "not-allowed" : "pointer",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                              }}
+                            >
+                              Next ›
+                            </button>
+                            <button
+                              type="button"
+                              disabled={result.page >= result.totalPages}
+                              onClick={() => handleSearch(result.totalPages)}
+                              style={{
+                                background: "rgba(255, 255, 255, 0.05)",
+                                border: "1px solid rgba(255, 255, 255, 0.15)",
+                                color: result.page >= result.totalPages ? "#6b7280" : "#f3f4f6",
+                                padding: "6px 12px",
+                                borderRadius: "6px",
+                                cursor: result.page >= result.totalPages ? "not-allowed" : "pointer",
+                                fontSize: "12px",
+                                fontWeight: 600,
+                              }}
+                            >
+                              Last »
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </>
                 );
