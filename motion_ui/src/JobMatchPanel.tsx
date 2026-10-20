@@ -154,7 +154,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [filterTopOnly, setFilterTopOnly] = useState(false);
   const [panelView, setPanelView] = useState<"search" | "tracker">("search");
-  const [pageSize, setPageSize] = useState<number>(50);
+  const [pageSize, setPageSize] = useState<number>(10);
   const [activeNetworkTarget, setActiveNetworkTarget] = useState<{ company: string; role: string } | null>(null);
 
   const ready = resumeStatus === "reviewed" || resumeStatus === "ready";
@@ -340,7 +340,7 @@ export default function JobMatchPanel({ resumeId, resumeStatus }: Props) {
 
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <span style={{ fontSize: "12.5px", color: "#9ca3af" }}>Show per page:</span>
-                        {[25, 50, 100].map((sz) => (
+                        {[10, 25, 50].map((sz) => (
                           <button
                             key={sz}
                             type="button"

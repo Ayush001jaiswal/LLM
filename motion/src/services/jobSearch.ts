@@ -549,9 +549,9 @@ function formatSalary(job: MarketJob): string | null {
 // Main export
 // ---------------------------------------------------------------------------
 export async function findMatchingJobs(params: JobSearchParams): Promise<JobSearchResult> {
-  const { resumeData, targetRole, location, remoteOnly = false, page = 1, pageSize = 50, limit } = params;
+  const { resumeData, targetRole, location, remoteOnly = false, page = 1, pageSize = 10, limit } = params;
   const warnings: string[] = [];
-  const effectivePageSize = limit ? Math.min(limit, 500) : Math.min(Math.max(pageSize, 1), 500);
+  const effectivePageSize = limit ? Math.min(limit, 100) : Math.min(Math.max(pageSize, 1), 100);
   const effectivePage = Math.max(page, 1);
 
   // Step 1 — Profile analysis via LLM
@@ -621,16 +621,30 @@ export async function findMatchingJobs(params: JobSearchParams): Promise<JobSear
     raw = deduplicateJobs(fallbackJobs);
   }
 
-  // Step 3 — Strict Relevance Filtering against Resume Title, Skills, and Experience
+  // Step 3 — Strict Relevance Filtering against Resume Title, Skills, Experience, and Location
   let filtered = preFilter(raw, profile);
-  if (filtered.length < 5 && raw.length > 0) {
-    filtered = raw;
+
+  // If user has not specified a foreign location, ensure jobs are relevant/accessible to Indian candidates
+  // (India jobs, or Remote/Worldwide/Global remote jobs)
+  const isIndiaDefault = !location || /india/i.test(location);
+  if (isIndiaDefault) {
+    filtered = filtered.filter((job) => {
+      const loc = (job.location?.display_name || "").toLowerCase();
+      // Match Indian cities, states, "India", or remote/global positions open worldwide
+      return (
+        /india|remote|anywhere|worldwide|global|bengaluru|bangalore|hyderabad|pune|delhi|noida|gurugram|gurgaon|mumbai|chennai|kolkata|ahmedabad|kerala/i.test(
+          loc
+        ) ||
+        job.source?.includes("Careers") // Direct ATS feeds often hire globally/remote for top tier
+      );
+    });
   }
 
   // Score all retrieved jobs using comprehensive relevance heuristics
-  const allScoredCandidates: ScoredMarketJob[] = filtered.map((job) =>
-    calculateJobRelevance(job, profile, targetRole)
-  );
+  const allScoredCandidates: ScoredMarketJob[] = filtered
+    .map((job) => calculateJobRelevance(job, profile, targetRole))
+    // Filter strictly for relevant jobs: must have title alignment or primary skill match (relevance score >= 20)
+    .filter((scored) => scored.relevanceScore >= 20);
 
   // Sort globally by relevance score descending (Top tier companies + strong skill/experience alignment float to top)
   allScoredCandidates.sort((a, b) => b.relevanceScore - a.relevanceScore);

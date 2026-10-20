@@ -31,8 +31,8 @@ router.post("/", uploadLimiter, async (req, res) => {
   const location   = typeof req.body?.location   === "string" ? req.body.location.trim()   : undefined;
   const remoteOnly = req.body?.remoteOnly === true;
   const page       = typeof req.body?.page       === "number" ? Math.max(1, req.body.page) : 1;
-  const pageSize   = typeof req.body?.pageSize   === "number" ? Math.min(Math.max(1, req.body.pageSize), 500) : 50;
-  const limit      = typeof req.body?.limit      === "number" ? Math.min(req.body.limit, 500) : undefined;
+  const pageSize   = typeof req.body?.pageSize   === "number" ? Math.min(Math.max(1, req.body.pageSize), 100) : 10;
+  const limit      = typeof req.body?.limit      === "number" ? Math.min(req.body.limit, 100) : undefined;
 
   try {
     const result = await findMatchingJobs({
